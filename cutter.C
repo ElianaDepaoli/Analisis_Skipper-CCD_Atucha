@@ -12,6 +12,7 @@ Authors: Dario Rodrigues & Eliana Depaoli
 Last modification: 
 -> August 22th, 2024: Data type of variables bleedX & bleedY switched to Float
 -> May 27th, 2025: New hot columns added. The script must be into the folder containing the files to cut. 
+-> May 30th, 2025: calPixTree is saved in the cutted files. Branches: x, y, ePix, RunID, ohdu. Hot columns and ohdu cuts are applied.
 */
 
 #include <iostream>
