@@ -2,7 +2,7 @@
 Códigos para recortar catálogos, calcular variables de interés (RN, SER, Hot Columns, etc) , obtener espectros.
 Se listan en el orden en el que deben ser utilizados.
 
-#### cutter.C ####
+### cutter.C ###
 Aplica cortes de calidad a cada archivo root. 
 
 Cómo usarlo:
@@ -23,24 +23,27 @@ Incorpora a los catálogos ya cortados un nuevo tree 'calc' que contiene las sig
 
 No cambia el nombre de los root file.
 
-Requisitos:
-	Que exista atucha1.root en el mismo directorio, conteniendo las simulaciones MC necesarias para calcular la probabilidad de ser neutrino usando las varianzas.
+###Requisitos:
+	Que exista atucha1.root en algún directorio, conteniendo las simulaciones MC necesarias para calcular la probabilidad de ser neutrino usando las varianzas.
 
-Antes de usarlo:
-	Solo si es necesario: editar en el código fuente *.cpp: 
+###Antes de usarlo:
+	'''
+	Solo si es necesario: editar en el código fuente *.cpp las siguientes variables: 
 	-> hot_col_amount = cantidad de columnas brillantes recortadas con cutter.C; 
 	-> factor = 0.5 si se lee entre dos imágenes sucesivas, factor = 1 si no
+	-> filename_sim = {"/home/ruta_completa/atucha1.root"};
 	Copiar todos los Cutted*.root del paso anterior dentro de una carpeta OFF y otra ON segun corresponda. No es obligatorio para hacer un análisis que no es ON vs OFF.
 	Compilarlo con la siguiente linea: g++ -o addtreetoimage.exe addtreetoimage.cpp `root-config --cflags --glibs`
 	Para que la compilación ocurra ROOT debe estar instalado.
-
-Cómo usarlo: se occre el ejecutable generado con la compilación
+	'''
+###Cómo usarlo: se corre el ejecutable generado con la compilación
+	'''
 	./addtreetoimage.exe /mnt/Data/Atucha_Data/OFF1_2022
 	./addtreetoimage.exe /mnt/Data/Atucha_Data/ON1_2022
 	./addtreetoimage.exe /mnt/Data/Atucha_Data/OFF2_2022
 	./addtreetoimage.exe /mnt/Data/Atucha_Data/OFF_2023
 	./addbranchestoroot.exe /mnt/Data/Atucha_Data/2022/ON1/Cutted_sin_extra_branches/ /mnt/Data/Atucha_Data/ON1_2022/
-
+	'''
 
 
 
