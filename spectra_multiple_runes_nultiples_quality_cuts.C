@@ -63,6 +63,10 @@ ls | awk -F'[_]' '{split($0,a,"run_"); split($0,b,"img"); print a[2], b[2], $0}'
 #include "TGraphErrors.h"
 #include "TChain.h"
 #include <time.h>
+
+#include <TGraph.h>
+#include <TF1.h>
+
 using std::cout; using std::vector; using std::string; using std :: copy; using std :: cerr;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -73,9 +77,6 @@ void Enable_and_Set_Branches_hs(TChain & tree);
 void Enable_and_Set_Branches_he(TChain & tree);
 void Enable_and_Set_Branches_calc(TChain & tree);
 
-void generate_energy_histo_with_quality_cuts(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
-	double calibration, double & total_day_time_bc, double & total_day_time_ac, 
-    vector<string> & startdate_vec, vector <double> &SEE_v, float see_min, float see_max, double exposure_factor);
 void generate_energy_histo_no_variance_cuts(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
     double calibration, double & total_day_time_bc, double & total_day_time_ac, 
     vector<string> & startdate_vec, vector <double> &SEE_v, float see_min, float see_max, double exposure_factor);
@@ -215,18 +216,27 @@ int ebines = 20;
 double x_error_binsize = (emaxbin-eminbin)/ebines/2; // in keV
 double bin_size_in_keV = x_error_binsize*2;
 
-TH1D * e_no_variance_cut_EDGE_A_histo = new TH1D("Data NO Edges", "Reactor OFF", ebines, eminbin, emaxbin);
-TH1D * e_no_variance_cut_EDGE_HC_B_histo = new TH1D("Data NO Edges No Hot Columns", "Reactor OFF", ebines, eminbin, emaxbin);
-TH1D * e_bulk_C_hist = new TH1D("Data NO Edges No Hot Columns Variance Cutted", "Reactor OFF ", ebines, eminbin, emaxbin);
-TH1D * e_bulk_D_hist = new TH1D("Data NO Edges No Hot Columns Variance Cutted neutrino-Probability Cut", "Reactor OFF ", ebines, eminbin, emaxbin);
-
-/*TH1D * e_bulk_A_hist = new TH1D("Data SET A", "Reactor A ", ebines, eminbin, emaxbin);
-TH1D * e_bulk_B_hist = new TH1D("Data SET B", "Reactor B ", ebines, eminbin, emaxbin);*/
+//TH1D * e_no_variance_cut_EDGE_A_histo = new TH1D("Data NO Edges", "Reactor OFF", ebines, eminbin, emaxbin);
+//TH1D * e_no_variance_cut_EDGE_HC_B_histo = new TH1D("Data NO Edges No Hot Columns", "Reactor OFF", ebines, eminbin, emaxbin);
+TH1D * e_bulk_A_hist = new TH1D("Run 33 y 34 ", "Reactor OFF ", ebines, eminbin, emaxbin);
+TH1D * e_bulk_B_hist = new TH1D("Run 35", "Reactor ON ", ebines, eminbin, emaxbin);
 
 vector<double> SEE_A; vector<double> SEE_B; vector<double> SEE_C;vector<double> SEE_D;
 vector<double> RN_A; vector<double> RN_B; vector<double> RN_C;
+
+
+// Efficiency_run33_ohdu1_splined ······
+
+// Original data points
+Double_t Graph2_fx3[25] = { 0.5, 2.5, 4.5, 6.5, 8.5, 10.5, 12.5, 14.5, 16.5, 18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 30.5, 32.5,
+                            34.5, 36.5, 38.5, 40.5, 42.5, 44.5, 46.5, 48.5 };
+Double_t Graph2_fy3[25] = { 0, 0.2025463, 0.2927981, 0.320341, 0.3042394, 0.2906287, 0.3503185, 0.3337364, 0.3579474, 0.3573086, 0.3559322, 0.3832709,
+                            0.3770302, 0.4151404, 0.4206549, 0.3848921, 0.3935644, 0.36618, 0.3773585, 0.4064362, 0.3866995, 0.3768657, 0.3979721, 0.3611111, 0.4149746 };
+
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void fill_histo_with_asymetric_errors(int numbin, double to_kdru, double efficiency, TH1D *h, Double_t (x_p)[],Double_t (y_p)[],Double_t (e_x)[],Double_t (e_y_u)[],Double_t (e_y_d)[])
+void fill_histo_with_asymetric_errors_ol(int numbin, double to_kdru, double efficiency, TH1D *h, Double_t (x_p)[],Double_t (y_p)[],Double_t (e_x)[],Double_t (e_y_u)[],Double_t (e_y_d)[])
 {
     for (int j{0}; j<numbin;++j) {
 
@@ -262,8 +272,57 @@ void fill_histo_with_asymetric_errors(int numbin, double to_kdru, double efficie
         cout<<"To correct by exposure and get the results in dru, counts and its error must be divided by: "<<to_kdru*efficiency<<endl<<endl;
 }
 
+void fill_histo_with_asymetric_errors(int numbin, double to_kdru, double efficiency, TH1D *h, Double_t (x_p)[],Double_t (y_p)[],Double_t (e_x)[],Double_t (e_y_u)[],Double_t (e_y_d)[])
+{
+
+    //Spline a los datos hasta 50 electrones, es decir 187.5 eV ··········
+    TGraph *graph = new TGraph(25, Graph2_fx3, Graph2_fy3);
+    TF1 *spline = new TF1("spline", "[0] + [1]*x + [2]*x*x + [3]*x*x*x", Graph2_fx3[0], Graph2_fx3[24]);
+    spline->SetParameters(1, 1, 1, 1);  // Initial parameters for the cubic polynomial
+    graph->Fit(spline, "R");  // "R" option means fit with range and rebin
+    cout << spline->Eval(50) << endl; 
+
+    for (int j{0}; j<numbin;++j) {
+
+        x_p[j]=h->GetXaxis()->GetBinCenter(j+1); //GetBinLowEdge(j+1);
+        y_p[j]=h->GetBinContent(j+1);
+        e_x[j]=x_error_binsize;
+       
+        if(y_p[j]>0 && y_p[j] < 1e2) {
+            e_y_d[j]=h->GetBinContent(j+1) - ROOT::MathMore::chisquared_quantile(0.16,2*(h->GetBinContent(j+1)))/2;
+            e_y_u[j]=ROOT::MathMore::chisquared_quantile(1-0.16,2*(h->GetBinContent(j+1))+2)/2 - h->GetBinContent(j+1);
+        }else if(y_p[j]>=1e2){
+            e_y_u[j]=pow(y_p[j],0.5);
+            e_y_d[j]=pow(y_p[j],0.5);
+        }else if(y_p[j]==0){
+            e_y_d[j]=0;
+            e_y_u[j]=ROOT::MathMore::chisquared_quantile(1-0.16,2*(h->GetBinContent(j+1))+2)/2 - h->GetBinContent(j+1);
+        }
+        
+        //cout<< x_p[j]*1000<<"   "<<y_p[j]<<"    "<<e_y_u[j]<<endl;
+        
+        if(x_p[j]/3.75 < 50) {
+            e_y_d[j]/=to_kdru*spline->Eval(x_p[j]/3.75);
+            e_y_u[j]/=to_kdru*spline->Eval(x_p[j]/3.75);
+            y_p[j]/=to_kdru*spline->Eval(x_p[j]/3.75);
+            cout << "efficiency = " << spline->Eval(x_p[j]/3.75) <<  "bin [electrones] = " << x_p[j]/3.75 << endl;
+        }else if(x_p[j]/3.75 > 50){
+            e_y_d[j]/=to_kdru*spline->Eval(50);
+            e_y_u[j]/=to_kdru*spline->Eval(50);
+            y_p[j]/=to_kdru*spline->Eval(50);
+            cout << "efficiency = " << spline->Eval(50) << "bin [electrones] = " << x_p[j]/3.75 << endl;
+        }
+
+        
+    }
+        cout<<"To correct by exposure and get the results in dru, counts and its error must be divided by: "<<to_kdru*efficiency<<endl<<endl;
+}
+
+
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void spectra_AvsB(){
+void spectra_multiple_runes_nultiples_quality_cuts(){
     SetGlobalStyle();
     /////////////////PATH A LOS ARCHIVOS //////////////////////////////////////////////////
 	const char* script_path = gSystem->Which(".", __FILE__);  // Obtiene la ruta del script
@@ -272,11 +331,11 @@ void spectra_AvsB(){
     //cout << "script_path " << script_path << endl;
     cout << "Processing in: " << path << endl;
 
-	string folder_B = "/Cutted_con_extra_branches_HOT_COL_new_EDGES_xVarMin_0_xVarMax_4_yVarMin_0yVarMax_4/";//"OFF_2023/";//"ON_2023/";//"OFF_2024/";
-	string folder_A = "/Cutted_con_extra_branches_EDGES_xVarMin_0_xVarMax_4_yVarMin_0yVarMax_4/";//"OFF_2024/"; 
+	string folder_A = "/OFF_2024_shield_full/";//"/Cutted_con_extra_branches_EDGES_xVarMin_0_xVarMax_4_yVarMin_0yVarMax_4/";//"OFF_2024/"; 
+	string folder_B = "/ON_24_25_shield_full/";//"/Cutted_con_extra_branches_HOT_COL_new_EDGES_xVarMin_0_xVarMax_4_yVarMin_0yVarMax_4/";//"OFF_2023/";//"ON_2023/";//"OFF_2024/";
 
-	string filelist_B = "OFF_R33_full_shield_2024__HC_Edges.txt";//"OFF_2023.txt";//"ON_2023.txt";//"OFF_2023.txt";
-    string filelist_A = "OFF_R33_full_shield_2024_Edges.txt";//"OFF_2024.txt";
+    string filelist_A = "OFF_2024_shield_full.txt";//"OFF_R33_full_shield_2024_Edges.txt";//"OFF_2024.txt";
+	string filelist_B = "ON24_25_shield_full.txt";//"OFF_R33_full_shield_2024__HC_Edges.txt";//"OFF_2023.txt";//"ON_2023.txt";//"OFF_2023.txt";
 
     cout << "filelist_A: "<< filelist_A << endl;
     cout << "filelist_B: "<< filelist_B << endl;
@@ -323,8 +382,7 @@ void spectra_AvsB(){
 	concatenateRootTrees(filelist_A,path+folder_A,chain_he_A, treename_he);
 	concatenateRootTrees(filelist_A,path+folder_A,chain_c_A, treename_c);
 
-    //generate_energy_histo_with_quality_cuts(chain_hS_A, chain_he_A, chain_c_A, e_bulk_A_hist, calibration, total_day_time_bseec,total_day_time_aseec, startdate_A, SEE_A, SEE_min_A, SEE_max_A, exposure_factor_A);
-    generate_energy_histo_no_variance_cuts(chain_hS_A, chain_he_A, chain_c_A, e_no_variance_cut_EDGE_A_histo, calibration, total_day_time_bseec,total_day_time_aseec, startdate_A, SEE_A, SEE_min_A, SEE_max_A, exposure_factor_A);
+    generate_energy_histo_variance_cuts(chain_hS_A, chain_he_A, chain_c_A, e_bulk_A_hist, calibration, total_day_time_bseec,total_day_time_aseec, startdate_A, SEE_A, SEE_min_A, SEE_max_A,exposure_factor_A);
     // Expousure calculation for Data Set A ///////////////////////////
 
     double expousure_time_in_days_A = total_day_time_aseec;
@@ -334,7 +392,7 @@ void spectra_AvsB(){
     cout << "Expousure time [days] after  SEE selection = " << expousure_time_in_days_A << endl;
     cout << "to_kdru_A = " << to_kdru_A << endl;
     
-    double integralA = e_no_variance_cut_EDGE_A_histo->Integral(5,50)/to_kdru_A/efficiency_A;//e_bulk_A_hist->Integral(5,50)/to_kdru_A/efficiency_A;
+    double integralA = e_bulk_A_hist->Integral(5,50)/to_kdru_A/efficiency_A;//e_bulk_A_hist->Integral(5,50)/to_kdru_A/efficiency_A;
     cout<<"Integral Data SET A: "<<integralA<<endl;
 
 // B ························
@@ -350,10 +408,7 @@ void spectra_AvsB(){
     concatenateRootTrees(filelist_B,path+folder_B,chain_c_B, treename_c);
                                                                     
     // Exposure_factor aparece para corregir expousure por limpieza entre lecturas
-    //generate_energy_histo_with_quality_cuts(chain_hS_B, chain_he_B, chain_c_B, e_bulk_B_hist, calibration, total_day_time_bseec,total_day_time_aseec, startdate_B, SEE_B, SEE_min_B, SEE_max_B,exposure_factor_B);
-    generate_energy_histo_no_variance_cuts(chain_hS_B, chain_he_B, chain_c_B, e_no_variance_cut_EDGE_HC_B_histo, calibration, total_day_time_bseec,total_day_time_aseec, startdate_B, SEE_B, SEE_min_B, SEE_max_B,exposure_factor_B);
-    //for (int i = 0; i < SEE_B.size(); ++i) SEE_B[i]=exposure_factor*SEE_B[i]; 
-    //metí esta cuenta dentro de la función generate_energy_histo_with_quality_cuts
+    generate_energy_histo_variance_cuts(chain_hS_B, chain_he_B, chain_c_B, e_bulk_B_hist, calibration, total_day_time_bseec,total_day_time_aseec, startdate_B, SEE_B, SEE_min_B, SEE_max_B,exposure_factor_B);
 
     // Expousure calculation for Data SET B ///////////////////////////
     //double expousure_time_in_days_B=total_day_time_aseec/exposure_factor;// el exposure_factor fue agregado debido a la limpieza. metí esta cuenta dentro de la función generate_energy_histo_with_quality_cuts
@@ -364,50 +419,9 @@ void spectra_AvsB(){
     cout << "Expousure time [days] after  SEE selection = " << expousure_time_in_days_B << endl;
     cout << "to_kdru_B = " << to_kdru_B << endl;
 
-    double integralB = e_no_variance_cut_EDGE_HC_B_histo->Integral(5,50)/to_kdru_B/efficiency_B;//e_bulk_B_hist->Integral(5,50)/to_kdru_B/efficiency_B;
+    double integralB = e_bulk_B_hist->Integral(5,50)/to_kdru_B/efficiency_B;//e_bulk_B_hist->Integral(5,50)/to_kdru_B/efficiency_B;
     cout<<"Integral Data SET B: "<<integralB<<endl<<endl<<endl;
 
-
-// C ························
-
-    /*TChain chain_hS_B(treename_hS.c_str());//c_str() converts string to char*;
-    TChain chain_he_B(treename_he.c_str());
-    TChain chain_c_B(treename_c.c_str());
-
-    cout << endl;
-    cout << "------ Data SET C -------" << endl;
-    concatenateRootTrees(filelist_B,path+folder_B,chain_hS_B, treename_hS);
-    concatenateRootTrees(filelist_B,path+folder_B,chain_he_B, treename_he);
-    concatenateRootTrees(filelist_B,path+folder_B,chain_c_B, treename_c);
-    */                                                                
-    generate_energy_histo_variance_cuts(chain_hS_B, chain_he_B, chain_c_B, e_bulk_C_hist, calibration, total_day_time_bseec,total_day_time_aseec, startdate_C, SEE_C, SEE_min_C, SEE_max_C,exposure_factor_C);
-
-    // Expousure calculation for Data SET B
-    double expousure_time_in_days_C=total_day_time_aseec;
-    total_day_time_aseec=0.0;
-    double to_kdru_C=mass_in_kg*bin_size_in_keV*expousure_time_in_days_C*1000;
-    
-    cout << "Expousure time [days] after  SEE selection = " << expousure_time_in_days_C << endl;
-    cout << "to_kdru_C = " << to_kdru_C << endl;
-
-    double integralC = e_bulk_C_hist -> Integral(5,50)/to_kdru_D/efficiency_C;//
-    cout<<"Integral Data SET C: "<< integralC << endl << endl << endl;
-
-
-// D ························
-
-    generate_energy_histo_variance_neutrino_probability_cuts(chain_hS_B, chain_he_B, chain_c_B, e_bulk_D_hist, calibration, total_day_time_bseec,total_day_time_aseec, startdate_D, SEE_D, SEE_min_D, SEE_max_D,exposure_factor_D);
-
-    // Expousure calculation for Data SET B
-    double expousure_time_in_days_D=total_day_time_aseec;
-    total_day_time_aseec=0.0;
-    double to_kdru_D=mass_in_kg*bin_size_in_keV*expousure_time_in_days_C*1000;
-    
-    cout << "Expousure time [days] after  SEE selection = " << expousure_time_in_days_C << endl;
-    cout << "to_kdru_C = " << to_kdru_C << endl;
-
-    double integralD = e_bulk_D_hist -> Integral(5,50)/to_kdru_D/efficiency_C;//
-    cout<<"Integral Data SET C: "<< integralD << endl << endl << endl;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -424,29 +438,24 @@ void spectra_AvsB(){
     Double_t e_y_B_d[ebines];
     Double_t e_y_B_u[ebines];
     Double_t e_plot_B[ebines];//OFF AQC BSEEC [counts/rates]
-
+/*
     Double_t e_y_C_d[ebines];
     Double_t e_y_C_u[ebines];
     Double_t e_plot_C[ebines];//
-
+*/
     cout<<"For Data SET A: "<<endl;
-    //fill_histo_with_asymetric_errors(ebines, to_kdru_A, efficiency_A, e_bulk_A_hist, x_plot,e_plot_A,e_x,e_y_A_u,e_y_A_d);
-    fill_histo_with_asymetric_errors(ebines, to_kdru_A, efficiency_A, e_no_variance_cut_EDGE_A_histo, x_plot,e_plot_A,e_x,e_y_A_u,e_y_A_d);
+    fill_histo_with_asymetric_errors(ebines, to_kdru_A, efficiency_A, e_bulk_A_hist, x_plot,e_plot_A,e_x,e_y_A_u,e_y_A_d);
     
     cout<<"For Data SET B: "<<endl;
-    //fill_histo_with_asymetric_errors(ebines, to_kdru_B, efficiency_B, e_bulk_B_hist, x_plot,e_plot_B,e_x,e_y_B_u,e_y_B_d);
-    fill_histo_with_asymetric_errors(ebines, to_kdru_B, efficiency_B, e_no_variance_cut_EDGE_HC_B_histo, x_plot,e_plot_B,e_x,e_y_B_u,e_y_B_d);
+    fill_histo_with_asymetric_errors(ebines, to_kdru_B, efficiency_B, e_bulk_B_hist, x_plot,e_plot_B,e_x,e_y_B_u,e_y_B_d);
     
-    cout<<"For Data SET C: "<<endl;
-    fill_histo_with_asymetric_errors(ebines, to_kdru_C, efficiency_C, e_bulk_C_hist, x_plot,e_plot_C,e_x,e_y_C_u,e_y_C_d);
-
     TCanvas* c1 = new TCanvas("canvas", "Spectra", 1200, 600);
     c1->SetGrid();
     //c1->SetLogy();
 
     TGraphAsymmErrors * grA = new TGraphAsymmErrors(ebines,x_plot,e_plot_A,e_x,e_x,e_y_A_d,e_y_A_u);
     TGraphAsymmErrors * grB = new TGraphAsymmErrors(ebines,x_plot,e_plot_B,e_x,e_x,e_y_B_d,e_y_B_u);
-    TGraphAsymmErrors * grC = new TGraphAsymmErrors(ebines,x_plot,e_plot_C,e_x,e_x,e_y_C_d,e_y_C_u);
+    //TGraphAsymmErrors * grC = new TGraphAsymmErrors(ebines,x_plot,e_plot_C,e_x,e_x,e_y_C_d,e_y_C_u);
     
     grB->SetMarkerStyle(20);
     grB->SetLineColor(kOrange+10);
@@ -469,20 +478,20 @@ void spectra_AvsB(){
     grA->SetMarkerSize(1.3);
     grA->Draw("P same");
 
-    grC->SetMarkerStyle(22);
+    /*grC->SetMarkerStyle(22);
     grC->SetLineColor(kMagenta+1);//
     grC->SetMarkerColor(kMagenta+1);
     grC->SetMarkerSize(1.3);
     grC->Draw("P same");
+    */
 
-
-  /*  auto legend2 = new TLegend(0.55,0.75,0.99,0.95); 
-    legend2->AddEntry(grA,"Extention Edges","p"); // .c_str() title_A
-    legend2->AddEntry(grB,"Edges + Hot columns","p"); // .c_str() title_B
-    legend2->AddEntry(grC,"Edges + Hot columns + Event Spatial Variance","p"); // .c_str() title_C
+    auto legend2 = new TLegend(0.55,0.75,0.99,0.95); 
+    legend2->AddEntry(grA,title_A,"p"); // .c_str() title_A
+    legend2->AddEntry(grB,title_B,"p"); // .c_str() title_B
+    //legend2->AddEntry(grC,"Edges + Hot columns + Event Spatial Variance","p"); // .c_str() title_C
 
     legend2->Draw();
-*/
+
     /////////////////////////////////////////////////////////////////////////
  /*  
     // Crea el pad para el inset
@@ -554,6 +563,7 @@ void concatenateRootTrees(const string & filelist, const string & path, TChain &
 }
 
 ///Calculation ///////////////////////////////////////////////////////////////////////////////////////// 
+// ENERGY ···········
 void generate_energy_histo_no_variance_cuts(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
     double calibration, double & total_day_time_bc, double & total_day_time_ac, 
     vector<string> & startdate_vec, vector <double> &SEE_v, float see_min, float see_max, double exposure_factor){
@@ -673,7 +683,6 @@ void generate_energy_histo_variance_cuts(TChain & texp,TChain & header, TChain &
                         
             startdate_vec.push_back(DATESTART);
             //SEE_v.push_back(SEE*exposure_factor);
-            //SEE_v.push_back(SER_1*exposure_factor/time_expo);
             SEE_v.push_back(SER_1/time_expo);//time_expo
             runID_OLD=runID;
             ++che;           
@@ -792,12 +801,6 @@ void generate_energy_histo_variance_neutrino_probability_cuts(TChain & texp,TCha
     che=0;aux_images=0;runID_OLD=0;
 
 }
-
-
-
-
-
-
 
 void generate_energy_histo_with_quality_cuts_old(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
 	double calibration, double & total_day_time_bc, double & total_day_time_ac, 
