@@ -176,7 +176,6 @@ double proba_min = 0.0;
 // Expousure factor between images with cleanning in between
 double exposure_factor_A = 2.0;
 double exposure_factor_B = 2.0;
-double exposure_factor_C = 2.0;
 
 //Calculation////////////////////////////////////////////////////////////////////////////////////////////
 double calibration = 1.0163134;//correction with 8.048 keV peak from Cu fluorescence
@@ -205,38 +204,88 @@ double mass_in_kg = area*height*rho_Si; //0.70/1000;
 
 /////////////////////////////////////////////////////////////////////////////
 //ENERGY
-//float eminbin = 0.015; //[keV]
-//float emaxbin = 0.215; //[keV]
+float eminbin = 0.040; //[keV]
+float emaxbin = 0.240; //[keV]
 
-float eminbin = 0.100;//0.015;  //[keV]
-float emaxbin = 2.00;//0.340; //[keV]
+//float eminbin = 0.100;//0.015;  //[keV]
+//float emaxbin = 10.000;//2.00;//0.340; //[keV]
 
-int ebines = 20; 
+int ebines = 2; 
 
 double x_error_binsize = (emaxbin-eminbin)/ebines/2; // in keV
 double bin_size_in_keV = x_error_binsize*2;
 
 //TH1D * e_no_variance_cut_EDGE_A_histo = new TH1D("Data NO Edges", "Reactor OFF", ebines, eminbin, emaxbin);
 //TH1D * e_no_variance_cut_EDGE_HC_B_histo = new TH1D("Data NO Edges No Hot Columns", "Reactor OFF", ebines, eminbin, emaxbin);
-TH1D * e_bulk_A_hist = new TH1D("Run 33 y 34 ", "Reactor OFF ", ebines, eminbin, emaxbin);
-TH1D * e_bulk_B_hist = new TH1D("Run 35", "Reactor ON ", ebines, eminbin, emaxbin);
+TH1D * e_bulk_A_hist = new TH1D("Run 33 to 34 ", "Reactor OFF ", ebines, eminbin, emaxbin);
+TH1D * e_bulk_B_hist = new TH1D("Run 35 to 43", "Reactor ON ", ebines, eminbin, emaxbin);
 
 vector<double> SEE_A; vector<double> SEE_B; vector<double> SEE_C;vector<double> SEE_D;
 vector<double> RN_A; vector<double> RN_B; vector<double> RN_C;
 
 
-// Efficiency_run33_ohdu1_splined ······
-
-// Original data points
-Double_t Graph2_fx3[25] = { 0.5, 2.5, 4.5, 6.5, 8.5, 10.5, 12.5, 14.5, 16.5, 18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 30.5, 32.5,
-                            34.5, 36.5, 38.5, 40.5, 42.5, 44.5, 46.5, 48.5 };
-Double_t Graph2_fy3[25] = { 0, 0.2025463, 0.2927981, 0.320341, 0.3042394, 0.2906287, 0.3503185, 0.3337364, 0.3579474, 0.3573086, 0.3559322, 0.3832709,
-                            0.3770302, 0.4151404, 0.4206549, 0.3848921, 0.3935644, 0.36618, 0.3773585, 0.4064362, 0.3866995, 0.3768657, 0.3979721, 0.3611111, 0.4149746 };
-
-
+// Efficiency_run33_ohdu1 ······
+Double_t eff_ohdu1_x[25] = { 0.5, 2.5, 4.5, 6.5, 8.5, 10.5, 12.5, 14.5, 16.5, 18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 30.5, 32.5,
+34.5, 36.5, 38.5, 40.5, 42.5, 44.5, 46.5, 48.5};
+Double_t eff_ohdu1_y[25] = { 0, 0, 0.2207959, 0.2997573, 0.2910448, 0.2963855, 0.3101343, 0.3305288, 0.35, 0.3835443, 0.3825338, 0.3428218, 0.3811821, 0.3873874, 0.3640898, 0.3533007, 0.4116915,
+0.373494, 0.3925234, 0.4094118, 0.4407407, 0.3897316, 0.4050179, 0.428744, 0.4076739 };
+// Efficiency_run35-43_ohdu1 ······
+Double_t eff_ohdu1_r35to43_x[1461] = { 0.5, 2.5, 4.5, 6.5, 8.5, 10.5, 12.5, 14.5, 16.5, 18.5, 20.5, 22.5, 24.5, 26.5, 28.5, 30.5, 32.5,
+34.5, 36.5, 38.5, 40.5, 42.5, 44.5, 46.5, 48.5 };
+Double_t eff_ohdu1_r35to43_y[1461] = { 0, 0, 0.2387879, 0.2630938, 0.2668299, 0.3071429, 0.3390453, 0.3590062, 0.3520599, 0.3460621, 0.3368794, 0.366127, 0.374092, 0.3586698, 0.3685393, 0.373494, 0.3514793, 0.3703242,
+0.3590392, 0.3710692, 0.3972445, 0.3654568, 0.3719512, 0.3950456, 0.3737745};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void fill_histo_with_asymetric_errors_ol(int numbin, double to_kdru, double efficiency, TH1D *h, Double_t (x_p)[],Double_t (y_p)[],Double_t (e_x)[],Double_t (e_y_u)[],Double_t (e_y_d)[])
+
+void fill_histo_with_asymetric_errors(int numbin, double to_kdru, Double_t eff_x[], Double_t eff_y[], TH1D *h, Double_t (x_p)[],Double_t (y_p)[],Double_t (e_x)[],Double_t (e_y_u)[],Double_t (e_y_d)[])
+{
+
+    //Spline a los datos hasta 50 electrones, es decir 187.5 eV ··········
+    TGraph *graph = new TGraph(25, eff_x, eff_y);
+    //TF1 *spline = new TF1("spline", "[0] + [1]*x + [2]*x*x + [3]*x*x*x", eff_x[0], eff_x[24]);
+    TF1 *spline = new TF1("spline", "[0] + [1]*x + [2]*x*x + [3]*x*x*x + [4]*x*x*x*x + [5]*x*x*x*x*x + [6]*x*x*x*x*x*x ", eff_x[0], eff_x[24]);
+    spline->SetParameters(1, 1, 1, 0.5, 1,3,5);  // Initial parameters for the cubic polynomial
+    graph->Fit(spline, "R");  // "R" option means fit with range and rebin
+    cout << spline->Eval(49) << endl; 
+    float energy_eh = 0.00375;
+
+    for (int j{0}; j<numbin;++j) {
+
+        x_p[j]=h->GetXaxis()->GetBinCenter(j+1); //GetBinLowEdge(j+1);
+        y_p[j]=h->GetBinContent(j+1);
+        e_x[j]=x_error_binsize;
+       
+        if(y_p[j]>0 && y_p[j] < 1e2) {
+            e_y_d[j]=h->GetBinContent(j+1) - ROOT::MathMore::chisquared_quantile(0.16,2*(h->GetBinContent(j+1)))/2;
+            e_y_u[j]=ROOT::MathMore::chisquared_quantile(1-0.16,2*(h->GetBinContent(j+1))+2)/2 - h->GetBinContent(j+1);
+        }else if(y_p[j]>=1e2){
+            e_y_u[j]=pow(y_p[j],0.5);
+            e_y_d[j]=pow(y_p[j],0.5);
+        }else if(y_p[j]==0){
+            e_y_d[j]=0;
+            e_y_u[j]=ROOT::MathMore::chisquared_quantile(1-0.16,2*(h->GetBinContent(j+1))+2)/2 - h->GetBinContent(j+1);
+        }
+        
+        //cout<< x_p[j]*1000<<"   "<<y_p[j]<<"    "<<e_y_u[j]<<endl;
+        
+        if(x_p[j]/energy_eh < 50) {
+            e_y_d[j]/=to_kdru*spline->Eval(x_p[j]/energy_eh);
+            e_y_u[j]/=to_kdru*spline->Eval(x_p[j]/energy_eh);
+            y_p[j]/=to_kdru*spline->Eval(x_p[j]/energy_eh);
+            cout << "efficiency = " << spline->Eval(x_p[j]/energy_eh) <<  "bin [electrones] = " << x_p[j]/energy_eh << endl;
+        }else if(x_p[j]/energy_eh > 50){
+            e_y_d[j]/=to_kdru*spline->Eval(49);
+            e_y_u[j]/=to_kdru*spline->Eval(49);
+            y_p[j]/=to_kdru*spline->Eval(49);
+            cout << "efficiency = " << spline->Eval(49) << "bin [electrones] = " << x_p[j]/energy_eh << endl;
+        }
+
+        
+    }
+        cout<<"To correct by exposure and get the results in dru, counts and its error must be divided by: "<<to_kdru*spline->Eval(49)<<endl<<endl;
+}
+
+void fill_histo_with_asymetric_errors_old(int numbin, double to_kdru, double efficiency, TH1D *h, Double_t (x_p)[],Double_t (y_p)[],Double_t (e_x)[],Double_t (e_y_u)[],Double_t (e_y_d)[])
 {
     for (int j{0}; j<numbin;++j) {
 
@@ -245,8 +294,8 @@ void fill_histo_with_asymetric_errors_ol(int numbin, double to_kdru, double effi
         e_x[j]=x_error_binsize;
        
         if(y_p[j]>0 && y_p[j] < 1e2) {
-	        e_y_d[j]=h->GetBinContent(j+1) - ROOT::MathMore::chisquared_quantile(0.16,2*(h->GetBinContent(j+1)))/2;
-	        e_y_u[j]=ROOT::MathMore::chisquared_quantile(1-0.16,2*(h->GetBinContent(j+1))+2)/2 - h->GetBinContent(j+1);
+            e_y_d[j]=h->GetBinContent(j+1) - ROOT::MathMore::chisquared_quantile(0.16,2*(h->GetBinContent(j+1)))/2;
+            e_y_u[j]=ROOT::MathMore::chisquared_quantile(1-0.16,2*(h->GetBinContent(j+1))+2)/2 - h->GetBinContent(j+1);
         }else if(y_p[j]>=1e2){
             e_y_u[j]=pow(y_p[j],0.5);
             e_y_d[j]=pow(y_p[j],0.5);
@@ -272,55 +321,6 @@ void fill_histo_with_asymetric_errors_ol(int numbin, double to_kdru, double effi
         cout<<"To correct by exposure and get the results in dru, counts and its error must be divided by: "<<to_kdru*efficiency<<endl<<endl;
 }
 
-void fill_histo_with_asymetric_errors(int numbin, double to_kdru, double efficiency, TH1D *h, Double_t (x_p)[],Double_t (y_p)[],Double_t (e_x)[],Double_t (e_y_u)[],Double_t (e_y_d)[])
-{
-
-    //Spline a los datos hasta 50 electrones, es decir 187.5 eV ··········
-    TGraph *graph = new TGraph(25, Graph2_fx3, Graph2_fy3);
-    TF1 *spline = new TF1("spline", "[0] + [1]*x + [2]*x*x + [3]*x*x*x", Graph2_fx3[0], Graph2_fx3[24]);
-    spline->SetParameters(1, 1, 1, 1);  // Initial parameters for the cubic polynomial
-    graph->Fit(spline, "R");  // "R" option means fit with range and rebin
-    cout << spline->Eval(50) << endl; 
-
-    for (int j{0}; j<numbin;++j) {
-
-        x_p[j]=h->GetXaxis()->GetBinCenter(j+1); //GetBinLowEdge(j+1);
-        y_p[j]=h->GetBinContent(j+1);
-        e_x[j]=x_error_binsize;
-       
-        if(y_p[j]>0 && y_p[j] < 1e2) {
-            e_y_d[j]=h->GetBinContent(j+1) - ROOT::MathMore::chisquared_quantile(0.16,2*(h->GetBinContent(j+1)))/2;
-            e_y_u[j]=ROOT::MathMore::chisquared_quantile(1-0.16,2*(h->GetBinContent(j+1))+2)/2 - h->GetBinContent(j+1);
-        }else if(y_p[j]>=1e2){
-            e_y_u[j]=pow(y_p[j],0.5);
-            e_y_d[j]=pow(y_p[j],0.5);
-        }else if(y_p[j]==0){
-            e_y_d[j]=0;
-            e_y_u[j]=ROOT::MathMore::chisquared_quantile(1-0.16,2*(h->GetBinContent(j+1))+2)/2 - h->GetBinContent(j+1);
-        }
-        
-        //cout<< x_p[j]*1000<<"   "<<y_p[j]<<"    "<<e_y_u[j]<<endl;
-        
-        if(x_p[j]/3.75 < 50) {
-            e_y_d[j]/=to_kdru*spline->Eval(x_p[j]/3.75);
-            e_y_u[j]/=to_kdru*spline->Eval(x_p[j]/3.75);
-            y_p[j]/=to_kdru*spline->Eval(x_p[j]/3.75);
-            cout << "efficiency = " << spline->Eval(x_p[j]/3.75) <<  "bin [electrones] = " << x_p[j]/3.75 << endl;
-        }else if(x_p[j]/3.75 > 50){
-            e_y_d[j]/=to_kdru*spline->Eval(50);
-            e_y_u[j]/=to_kdru*spline->Eval(50);
-            y_p[j]/=to_kdru*spline->Eval(50);
-            cout << "efficiency = " << spline->Eval(50) << "bin [electrones] = " << x_p[j]/3.75 << endl;
-        }
-
-        
-    }
-        cout<<"To correct by exposure and get the results in dru, counts and its error must be divided by: "<<to_kdru*efficiency<<endl<<endl;
-}
-
-
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void spectra_multiple_runes_nultiples_quality_cuts(){
     SetGlobalStyle();
@@ -331,11 +331,11 @@ void spectra_multiple_runes_nultiples_quality_cuts(){
     //cout << "script_path " << script_path << endl;
     cout << "Processing in: " << path << endl;
 
-	string folder_A = "/OFF_2024_shield_full/";//"/Cutted_con_extra_branches_EDGES_xVarMin_0_xVarMax_4_yVarMin_0yVarMax_4/";//"OFF_2024/"; 
-	string folder_B = "/ON_24_25_shield_full/";//"/Cutted_con_extra_branches_HOT_COL_new_EDGES_xVarMin_0_xVarMax_4_yVarMin_0yVarMax_4/";//"OFF_2023/";//"ON_2023/";//"OFF_2024/";
+	string folder_A = "/OFF_2024_shield_full//";//
+	string folder_B = "/ON_24_25_shield_full//";//"/Cutted_con_extra_branches_HOT_COL_new_EDGES_xVarMin_0_xVarMax_4_yVarMin_0yVarMax_4/";//"OFF_2023/";//"ON_2023/";//"OFF_2024/";
 
     string filelist_A = "OFF_2024_shield_full.txt";//"OFF_R33_full_shield_2024_Edges.txt";//"OFF_2024.txt";
-	string filelist_B = "ON24_25_shield_full.txt";//"OFF_R33_full_shield_2024__HC_Edges.txt";//"OFF_2023.txt";//"ON_2023.txt";//"OFF_2023.txt";
+	string filelist_B = "ON_24_25_shield_full.txt";//"OFF_R33_full_shield_2024__HC_Edges.txt";//"OFF_2023.txt";//"ON_2023.txt";//"OFF_2023.txt";
 
     cout << "filelist_A: "<< filelist_A << endl;
     cout << "filelist_B: "<< filelist_B << endl;
@@ -343,13 +343,14 @@ void spectra_multiple_runes_nultiples_quality_cuts(){
     TString title_A = filelist_A.substr(0, filelist_A.find('.')).c_str();
     TString title_B = filelist_B.substr(0, filelist_B.find('.')).c_str();
     TString title_C = filelist_A.substr(0, filelist_A.find('.')) + ("Variance cuts");
-    TString filename_spect = "spectra" + title_A + title_B + ".png";
+    TString s1 = Form("%3f", eminbin);
+    TString s2 = Form("%3f", emaxbin);
+    TString filename_spect = "spectra" + title_A + title_B  + "_" + s1 + "keV_to_" + s2 + "keV" + ".png";
 
     //////////////////////////////////////////////////////////////////////////////////////
     double efficiency_A=0.4910; // Eficiencia despues de limpiar, 2023
     //double efficiency_B=0.4155; // Eficiencia antes de limpiar, 2022
     double efficiency_B=0.4910;
-    double efficiency_C=0.4910;
 
 	string treename_hS = "ThitSumm"; //Antes se llamaba hitSumm
 	string treename_he = "Theader"; // Antes se llamaba header
@@ -444,10 +445,10 @@ void spectra_multiple_runes_nultiples_quality_cuts(){
     Double_t e_plot_C[ebines];//
 */
     cout<<"For Data SET A: "<<endl;
-    fill_histo_with_asymetric_errors(ebines, to_kdru_A, efficiency_A, e_bulk_A_hist, x_plot,e_plot_A,e_x,e_y_A_u,e_y_A_d);
+    fill_histo_with_asymetric_errors(ebines, to_kdru_A, eff_ohdu1_x, eff_ohdu1_y, e_bulk_A_hist, x_plot,e_plot_A,e_x,e_y_A_u,e_y_A_d);
     
     cout<<"For Data SET B: "<<endl;
-    fill_histo_with_asymetric_errors(ebines, to_kdru_B, efficiency_B, e_bulk_B_hist, x_plot,e_plot_B,e_x,e_y_B_u,e_y_B_d);
+    fill_histo_with_asymetric_errors(ebines, to_kdru_B, eff_ohdu1_r35to43_x, eff_ohdu1_r35to43_y, e_bulk_B_hist, x_plot,e_plot_B,e_x,e_y_B_u,e_y_B_d);
     
     TCanvas* c1 = new TCanvas("canvas", "Spectra", 1200, 600);
     c1->SetGrid();
@@ -541,29 +542,166 @@ void spectra_multiple_runes_nultiples_quality_cuts(){
 
 }
 
-// Open files///////////////////////////////////////////////////////////////////////////////////////////////////////
-void concatenateRootTrees(const string & filelist, const string & path, TChain & chain, const string & treename)
-{
-	std::ifstream inputFileList(filelist.c_str());
-	
-	if(!inputFileList.is_open()) cerr << "File list missing " << filelist << endl ;
-	
-	string filename;
-	while(std::getline(inputFileList,filename)) //leer una linea de inputFileList y almacenarla en filename
-	{
-		string fullpath = path + filename;
-		//cout << fullpath << endl;
-		chain.Add(fullpath.c_str());
-	}
-
-	inputFileList.close();
-
-	cout << "Entries in " << treename << " tree " << chain.GetEntries() << endl;
-
-}
 
 ///Calculation ///////////////////////////////////////////////////////////////////////////////////////// 
 // ENERGY ···········
+void generate_energy_histo_variance_cuts(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
+    double calibration, double & total_day_time_bc, double & total_day_time_ac, 
+    vector<string> & startdate_vec, vector <double> &SEE_v, float see_min, float see_max, double exposure_factor){
+
+    double count=0;
+    cout<<"Mass in kg: "<<mass_in_kg<<endl;
+
+    int Entries_exp = texp.GetEntries();//int Entries_exp = 1e6;// 1 Entries_exp = 1 cluster
+    cout << "Entries in experimental data file: " << Entries_exp << endl;
+    
+    Enable_and_Set_Branches_hs(texp); //activates branches of interest
+    Enable_and_Set_Branches_he(header);
+    Enable_and_Set_Branches_calc(calc);
+
+    unsigned int che {0};  //to move along the tree header
+    double electrones {0}; //to fill the histogram
+    double energia {0};    //to fill the histogram
+    int aux_images{};      //amount of images leftover after SEE cut   
+    Int_t runID_OLD {0};   //image the event i_event-1 belong to
+
+    for (int i_event = 0; i_event < Entries_exp; ++i_event){
+    //if (i_event==1e6) break;
+        
+        texp.GetEntry(i_event); //reads activated branches in tree hitSumm in i_event
+        calc.GetEntry(i_event); //reads activated branches in tree calc in i_event
+
+        // To calculate exposure + ser selection
+        if ((runID != runID_OLD)) {// If this is a new image, count the previous one
+            header.GetEntry(che); //reads activated branches in tree header in i_event
+            total_day_time_bc +=  time_expo;//imagedurationindays(&DATESTART[0],&DATEEND[0]);//expousure before SEE cut //
+            //cout << "runID ="<< runID << endl;
+            
+            if(see_min<SER_1 && SER_1<see_max){ 
+                total_day_time_ac +=  time_expo;
+                ++aux_images;       
+            }
+                        
+            startdate_vec.push_back(DATESTART);
+            //SEE_v.push_back(SEE*exposure_factor);
+            SEE_v.push_back(SER_1/time_expo);//time_expo
+            runID_OLD=runID;
+            ++che;           
+        }
+
+        //if (e >= 16.0/3.75/calibration && e<=1.0e4/3.75/calibration){
+        //if (yMax<670){
+            //if (xVar>=0.0 && xVar<=1.6 && yVar<=1.6 &&  yVar>=0.0) {//selection of bulk events according to simulation
+                electrones=0;
+                //It calculates total number of electrons in the cluster
+                for (int i = 0; i < nSavedPix; ++i) electrones+=ePix[i];
+                 
+                energia=electrones*3.75*calibration*0.001; //keV 
+                
+                //Events selection - Quality cuts
+              //  if(see_min<SEE && SEE<see_max)  {
+
+                    // Event selection ////////////////////////////////////////////////
+
+                    if(xVar>=xVarMin_GM && xVar<xVarMax_GM && yVar>yVarMin_GM && yVar<yVarMax_GM){
+                        //if (oproba>=proba_min){
+                            h_e_bulk->Fill(energia);
+                        //} 
+                        
+                    }
+                //}
+            //}
+        //}
+        //}
+    }
+
+    //total_day_time_ac = total_day_time_ac/exposure_factor;
+    cout << endl;
+    cout << "# images before SEE cut = " << che << endl;
+    cout << "# images after SEE cut = " << aux_images << endl<< endl;
+    che=0;aux_images=0;runID_OLD=0;
+
+}
+
+void generate_energy_histo_variance_neutrino_probability_cuts(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
+    double calibration, double & total_day_time_bc, double & total_day_time_ac, 
+    vector<string> & startdate_vec, vector <double> &SEE_v, float see_min, float see_max, double exposure_factor){
+
+    double count=0;
+    cout<<"Mass in kg: "<<mass_in_kg<<endl;
+
+    int Entries_exp = texp.GetEntries();//int Entries_exp = 1e6;// 1 Entries_exp = 1 cluster
+    cout << "Entries in experimental data file: " << Entries_exp << endl;
+    
+    Enable_and_Set_Branches_hs(texp); //activates branches of interest
+    Enable_and_Set_Branches_he(header);
+    Enable_and_Set_Branches_calc(calc);
+
+    unsigned int che {0};  //to move along the tree header
+    double electrones {0}; //to fill the histogram
+    double energia {0};    //to fill the histogram
+    int aux_images{};      //amount of images leftover after SEE cut   
+    Int_t runID_OLD {0};   //image the event i_event-1 belong to
+
+    for (int i_event = 0; i_event < Entries_exp; ++i_event){
+    if (i_event==1e6) break;
+        
+        texp.GetEntry(i_event); //reads activated branches in tree hitSumm in i_event
+        calc.GetEntry(i_event); //reads activated branches in tree calc in i_event
+
+        // To calculate exposure + ser selection
+        if ((runID != runID_OLD)) {// If this is a new image, count the previous one
+            header.GetEntry(che); //reads activated branches in tree header in i_event
+            total_day_time_bc +=  time_expo;//imagedurationindays(&DATESTART[0],&DATEEND[0]);//expousure before SEE cut //
+            //cout << "runID ="<< runID << endl;
+            
+            if(see_min<SER_1 && SER_1<see_max){ 
+                total_day_time_ac +=  time_expo;
+                ++aux_images;       
+            }
+                        
+            startdate_vec.push_back(DATESTART);
+            //SEE_v.push_back(SEE*exposure_factor);
+            //SEE_v.push_back(SER_1*exposure_factor/time_expo);
+            SEE_v.push_back(SER_1/time_expo);//time_expo
+            runID_OLD=runID;
+            ++che;           
+        }
+
+        //if (e >= 16.0/3.75/calibration && e<=1.0e4/3.75/calibration){
+        //if (yMax<670){
+            if (xVar>=0.0 && xVar<=1.6 && yVar<=1.6 &&  yVar>=0.0) {//selection of bulk events according to simulation
+                electrones=0;
+                //It calculates total number of electrons in the cluster
+                for (int i = 0; i < nSavedPix; ++i) electrones+=ePix[i];
+                 
+                energia=electrones*3.75*calibration*0.001; //keV 
+                
+                //Events selection - Quality cuts
+              //  if(see_min<SEE && SEE<see_max)  {
+
+                    // Event selection ////////////////////////////////////////////////
+
+                    if(xVar>=xVarMin_GM && xVar<xVarMax_GM && yVar>yVarMin_GM && yVar<yVarMax_GM){
+                        //if (oproba>=proba_min){
+                            h_e_bulk->Fill(energia);
+                        //} 
+                        
+                    }
+                //}
+            }
+        //}
+        //}
+    }
+
+    //total_day_time_ac = total_day_time_ac/exposure_factor;
+    cout << endl;
+    cout << "# images before SEE cut = " << che << endl;
+    cout << "# images after SEE cut = " << aux_images << endl<< endl;
+    che=0;aux_images=0;runID_OLD=0;
+
+}
+
 void generate_energy_histo_no_variance_cuts(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
     double calibration, double & total_day_time_bc, double & total_day_time_ac, 
     vector<string> & startdate_vec, vector <double> &SEE_v, float see_min, float see_max, double exposure_factor){
@@ -644,163 +782,6 @@ void generate_energy_histo_no_variance_cuts(TChain & texp,TChain & header, TChai
 }
 
 
-void generate_energy_histo_variance_cuts(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
-    double calibration, double & total_day_time_bc, double & total_day_time_ac, 
-    vector<string> & startdate_vec, vector <double> &SEE_v, float see_min, float see_max, double exposure_factor){
-
-    double count=0;
-    cout<<"Mass in kg: "<<mass_in_kg<<endl;
-
-    int Entries_exp = texp.GetEntries();//int Entries_exp = 1e6;// 1 Entries_exp = 1 cluster
-    cout << "Entries in experimental data file: " << Entries_exp << endl;
-    
-    Enable_and_Set_Branches_hs(texp); //activates branches of interest
-    Enable_and_Set_Branches_he(header);
-    Enable_and_Set_Branches_calc(calc);
-
-    unsigned int che {0};  //to move along the tree header
-    double electrones {0}; //to fill the histogram
-    double energia {0};    //to fill the histogram
-    int aux_images{};      //amount of images leftover after SEE cut   
-    Int_t runID_OLD {0};   //image the event i_event-1 belong to
-
-    for (int i_event = 0; i_event < Entries_exp; ++i_event){
-    if (i_event==1e6) break;
-        
-        texp.GetEntry(i_event); //reads activated branches in tree hitSumm in i_event
-        calc.GetEntry(i_event); //reads activated branches in tree calc in i_event
-
-        // To calculate exposure + ser selection
-        if ((runID != runID_OLD)) {// If this is a new image, count the previous one
-            header.GetEntry(che); //reads activated branches in tree header in i_event
-            total_day_time_bc +=  time_expo;//imagedurationindays(&DATESTART[0],&DATEEND[0]);//expousure before SEE cut //
-            //cout << "runID ="<< runID << endl;
-            
-            if(see_min<SER_1 && SER_1<see_max){ 
-                total_day_time_ac +=  time_expo;
-                ++aux_images;       
-            }
-                        
-            startdate_vec.push_back(DATESTART);
-            //SEE_v.push_back(SEE*exposure_factor);
-            SEE_v.push_back(SER_1/time_expo);//time_expo
-            runID_OLD=runID;
-            ++che;           
-        }
-
-        //if (e >= 16.0/3.75/calibration && e<=1.0e4/3.75/calibration){
-        //if (yMax<670){
-            //if (xVar>=0.0 && xVar<=1.6 && yVar<=1.6 &&  yVar>=0.0) {//selection of bulk events according to simulation
-                electrones=0;
-                //It calculates total number of electrons in the cluster
-                for (int i = 0; i < nSavedPix; ++i) electrones+=ePix[i];
-                 
-                energia=electrones*3.75*calibration*0.001; //keV 
-                
-                //Events selection - Quality cuts
-              //  if(see_min<SEE && SEE<see_max)  {
-
-                    // Event selection ////////////////////////////////////////////////
-
-                    if(xVar>=xVarMin_GM && xVar<xVarMax_GM && yVar>yVarMin_GM && yVar<yVarMax_GM){
-                        //if (oproba>=proba_min){
-                            h_e_bulk->Fill(energia);
-                        //} 
-                        
-                    }
-                //}
-            //}
-        //}
-        //}
-    }
-
-    //total_day_time_ac = total_day_time_ac/exposure_factor;
-    cout << endl;
-    cout << "# images before SEE cut = " << che << endl;
-    cout << "# images after SEE cut = " << aux_images << endl<< endl;
-    che=0;aux_images=0;runID_OLD=0;
-
-}
-
-
-void generate_energy_histo_variance_neutrino_probability_cuts(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
-    double calibration, double & total_day_time_bc, double & total_day_time_ac, 
-    vector<string> & startdate_vec, vector <double> &SEE_v, float see_min, float see_max, double exposure_factor){
-
-    double count=0;
-    cout<<"Mass in kg: "<<mass_in_kg<<endl;
-
-    int Entries_exp = texp.GetEntries();//int Entries_exp = 1e6;// 1 Entries_exp = 1 cluster
-    cout << "Entries in experimental data file: " << Entries_exp << endl;
-    
-    Enable_and_Set_Branches_hs(texp); //activates branches of interest
-    Enable_and_Set_Branches_he(header);
-    Enable_and_Set_Branches_calc(calc);
-
-    unsigned int che {0};  //to move along the tree header
-    double electrones {0}; //to fill the histogram
-    double energia {0};    //to fill the histogram
-    int aux_images{};      //amount of images leftover after SEE cut   
-    Int_t runID_OLD {0};   //image the event i_event-1 belong to
-
-    for (int i_event = 0; i_event < Entries_exp; ++i_event){
-    if (i_event==1e6) break;
-        
-        texp.GetEntry(i_event); //reads activated branches in tree hitSumm in i_event
-        calc.GetEntry(i_event); //reads activated branches in tree calc in i_event
-
-        // To calculate exposure + ser selection
-        if ((runID != runID_OLD)) {// If this is a new image, count the previous one
-            header.GetEntry(che); //reads activated branches in tree header in i_event
-            total_day_time_bc +=  time_expo;//imagedurationindays(&DATESTART[0],&DATEEND[0]);//expousure before SEE cut //
-            //cout << "runID ="<< runID << endl;
-            
-            if(see_min<SER_1 && SER_1<see_max){ 
-                total_day_time_ac +=  time_expo;
-                ++aux_images;       
-            }
-                        
-            startdate_vec.push_back(DATESTART);
-            //SEE_v.push_back(SEE*exposure_factor);
-            //SEE_v.push_back(SER_1*exposure_factor/time_expo);
-            SEE_v.push_back(SER_1/time_expo);//time_expo
-            runID_OLD=runID;
-            ++che;           
-        }
-
-        //if (e >= 16.0/3.75/calibration && e<=1.0e4/3.75/calibration){
-        //if (yMax<670){
-            if (xVar>=0.0 && xVar<=1.6 && yVar<=1.6 &&  yVar>=0.0) {//selection of bulk events according to simulation
-                electrones=0;
-                //It calculates total number of electrons in the cluster
-                for (int i = 0; i < nSavedPix; ++i) electrones+=ePix[i];
-                 
-                energia=electrones*3.75*calibration*0.001; //keV 
-                
-                //Events selection - Quality cuts
-              //  if(see_min<SEE && SEE<see_max)  {
-
-                    // Event selection ////////////////////////////////////////////////
-
-                    if(xVar>=xVarMin_GM && xVar<xVarMax_GM && yVar>yVarMin_GM && yVar<yVarMax_GM){
-                        //if (oproba>=proba_min){
-                            h_e_bulk->Fill(energia);
-                        //} 
-                        
-                    }
-                //}
-            }
-        //}
-        //}
-    }
-
-    //total_day_time_ac = total_day_time_ac/exposure_factor;
-    cout << endl;
-    cout << "# images before SEE cut = " << che << endl;
-    cout << "# images after SEE cut = " << aux_images << endl<< endl;
-    che=0;aux_images=0;runID_OLD=0;
-
-}
 
 void generate_energy_histo_with_quality_cuts_old(TChain & texp,TChain & header, TChain &calc, TH1D*h_e_bulk, 
 	double calibration, double & total_day_time_bc, double & total_day_time_ac, 
@@ -1118,4 +1099,25 @@ void SEE_evolution_plot(vector<string> vecx, vector<Double_t> vecy,const int pas
     legend->Draw();
 	
 	gPad->RedrawAxis("g");
+}
+
+// Open files///////////////////////////////////////////////////////////////////////////////////////////////////////
+void concatenateRootTrees(const string & filelist, const string & path, TChain & chain, const string & treename)
+{
+    std::ifstream inputFileList(filelist.c_str());
+    
+    if(!inputFileList.is_open()) cerr << "File list missing " << filelist << endl ;
+    
+    string filename;
+    while(std::getline(inputFileList,filename)) //leer una linea de inputFileList y almacenarla en filename
+    {
+        string fullpath = path + filename;
+        //cout << fullpath << endl;
+        chain.Add(fullpath.c_str());
+    }
+
+    inputFileList.close();
+
+    cout << "Entries in " << treename << " tree " << chain.GetEntries() << endl;
+
 }
