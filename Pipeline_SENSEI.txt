@@ -1,0 +1,407 @@
+# SENSEI Data processing (Supermodules)
+
+This file describes the procedure followed to process data produced by multiple CCDs (supermodules). These steps are based on the ones explained in [SENSEI2020] for single CCDs. At the end of this process you will have produced `FITS` files that contain the averaged number of ADUs per pixel (ADU: Analog-to-Digital Unit) and a [ROOT] file with the reconstructed clusters in the images, among others. The whole pipeline can be illustrated as follows:
+
+<td align="center">
+	<img src="./images/Dataprocessing.png?raw=true" />
+</td>
+
+The pipeline is divided in sections: skipper2root, crosstalk, calibration, skExtract, cutHists and hotcol. Each section has a main script inside the boxes in blue. In light-blue you can find files that are actually used across the pipeline and in white files that are not used in the pipeline but are important for checking/secondary analisis.
+
+Below you will find a short description of what each script does and how to run them and, at the very end, an example divided in two sub-sections: how to run it step by step or how to run it automatically by a python script.
+
+As a supermodule image contains more than one CCD, the following instruction will use the two following files: `skp_example_file_1_1.fz` and `skp_example_file_1_2.fz` (`FZ` files are compressed `FITS` files. Note they share the same RUNID number `1`). `FITS` files are also accepted to start the process as long as the have they are 'raw images', i.e., images with all skipper samples.
+
+Given these two images the following scripts should be used in the following order:
+
+## `skipper2root.exe`
+
+
+
+The [skipper2root] script process raw Skipper CCD data to create [ROOT]/`FITS` files. It runs on C++ and needs to be compiled before using it for the first time. It requires [ROOT] and [CFITSIO] to be installed.
+
+#### ROOT INSTALLATION
+
+[ROOT] can be installed in several ways and it depends on what OS your using. For further instructions see [here](https://root.cern/install/).
+
+#### CFITSIO INSTALLATION
+
+[CFITSIO] can be installed in several ways, as well. Assuming you are using an Unix-based system do the following:
+
+* Go to [CFITSIO].
+* Download the `TAR.GZ` file in the mainpage.
+* Untar it following the README instructions, change the name of the folder to  `cfitsio` and move it to your home folder.
+* Add the following lines to your `~/.bashrc` configuration file:
+
+```bash
+#cfitsio
+export FITSIOROOT=~/cfitsio
+export LD_LIBRARY_PATH="\$FITSIOROOT:\$LD_LIBRARY_PATH"
+```
+
+Now you can compile `skipper2root`. In order to do this, you must be in the same folder `Makefile` and `skipper2root.cc` are and type the following in a terminal:
+
+>make
+
+If everything goes smoothly you should see a `skipper2root.exe` file inside your folder. 
+
+#### Usage: 
+ > skipper2root.exe -idBg \<gainmult\> skp_example_file_1.fz
+
+and for the same for the second file.
+
+#### Arguments:
+* `-i`: for saving a FITS image file with the averaged pixels. It will be named `proc_<input filename>.fits`
+* `-d:` for overwriting the output file if it exist.
+* `-B`: for computing a row-by-row baseline by fitting the 0-electron peak (new method). This option overrides most of the other options. 
+* `-g`: <gain> sets the gain assumed (ADU/e-/ssamp, default 1.0) when fitting the 0-electron peak when using the `-B` option. Here this is \<gainmult\>
+
+#### Inputs:
+* `skp*fz` files are used as inputs but `skp*fits` may be used as well. In the example we've used skp_example_file_1.fz where the 1 corresponds to what we will call RUNID number or just RUNID. Each file should have a different number.
+
+#### Outputs:
+* Using the options above two outputs are obtained:
+    * `skp_example_file_1.root:` ROOT file containing several [TTrees]. 
+        * `header_Tree0` (or 1,2,3 depending on quadrant), where all configuration data is stored.
+		* `skPixTree`, where processed information of averaged pixels is stored.  
+		* `skTablePixTree` same information as skPixTree but organized in a different data structure. s an entry for each (x,y) coordinate. Each entry hathere is a pixel value vector with a number of elements equal to the number of quadrants (typically 4). Each element in the vector is the pixel value in the corresponding quadrant. ie: pix[0] is the pixel value of the first quadrant. This is useful for cross-talk studies (among other things).
+    * `proc_skp_example_file_1.fits:` FITS file (openable with [ds9] or [astrofits.io.fits]) that contains an image of averaged pixels for each quadrant.
+
+<td align="center">
+	<img src="./images/skipper2root.jpeg?raw=true" />
+</td>
+	
+
+
+## `cross-talk.py`
+
+The [cross-talk] tool takes into account both intermodular and interquadrant crosstalk generating an output to be used for masking for all modules and quadrants. Additionally it estimates the effect of crosstalk in ADUs, correcting the signal in each pixel. We will see its implementation using mutiple files identified as `proc_skp_example_file_*_1.fits` where in \* information about module number is contained.
+
+#### Usage:
+> python cross-talk.py -g \<gainmult\> proc_skp_example_file_*_1.fits
+
+#### Arguments:
+-   `-g`: sets the gain assumed (ADU/e-/ssamp, default 1.0). Here this is \<gainmult\>.
+
+#### Inputs:
+* FITS files are used.
+
+#### Outputs:
+* Using the options above the following outputs are obtained:
+    * `crosstalk_proc_skp_example_file_all_1.fits`
+        * `FITS` file containing the crosstalk mask.
+    * `crosstalk_proc_skp_example_file_all_1.pkl`
+        * `PKL` file that contains output data from a fit inside the script.
+    * `crosstalk_proc_skp_example_file_all_1.json`
+        * `JSON` file that contains output data from a fit inside the script.
+    * `corr_proc_skp_example_file_1_*.fits`
+	    * Corrected fits files that take into account the offset in signal produced by crosstalk.
+
+Note there is only one `FITS` file per RUNID. This image will contain information about crosstalk among all quadrants but also among all modules and therefore it's stored in one file only. Also note that cross-talk.py script doesn't change our skp*root files. If needed, this process can be done by re-running skipper2root in the following way:
+
+> skipper2root.exe -idBg \<gainmult\> corr_proc_skp_example_file_1_1.fits
+
+And the same for `corr_proc_skp_example_file_1_2.fits`. Note the outputs of this step will be `proc_corr_proc_skp_example_file_1_*.fits` and `corr_proc_skp_example_file_1_*.root` but will not be included in the flow of this guide.
+
+<td align="center">
+	<img src="./images/cross-talk.jpeg?raw=true" />
+</td>
+	
+	
+
+## `cal.py`
+
+The script [cal.py] generates a `XML` file that can be used as the calibration file for `skExtract.exe`, a `PDF` showing the fits (a Gaussian fit to the 0 and 1 e- peaks, used to calculate the gain, and a Poisson\*Gaussian fit). It also generates a `CSV` file with the same information as the `XML` file and a `ROOT` file that stores the histograms in the `PDF` file for further analysis/manipulation. The `XML` will contain the gain and the noise from the Gaussian fits for each quadrant, as well as the position of the 0- electron peak.
+
+#### Usage:
+> python cal.py -dg \<gainmult\> -c crosstalk_proc_skp_example_file_1_.fits corr_proc_skp_example_file_1_1.fits
+
+And the same for `corr_proc_skp_example_file_1_2.fits`
+#### Arguments:
+
+-   `-d:`  for overwriting the output file if it exist.
+-   `-g:`  sets the gain assumed (ADU/e-/ssamp, default 1.0) when fitting the 0 e- peak when using the  `-B`  option. Here this is \<gainmult\>.
+-   `-c:` import FITS crosstalk mask file. Usually crosstalk interferes with 0 and 1 e- peaks so this mask is very much needed.
+
+#### Inputs:
+* FITS files are used.
+
+#### Outputs:
+* Using the options above the following outputs are obtained:
+    * `cal_corr_proc_skp_example_file_1_*.pdf`
+        * PDF that shows Gaussian fits for 0 and 1 e- peaks. May be useful for data quality inspection.
+    * `cal_corr_proc_skp_example_file_1_*.root`
+        * TH1F plots that show the fits saved in the PDF file
+    * `cal_corr_proc_skp_example_file_1_*.xml`
+        * XML that contains the gain and the noise from the Gaussian fits for each quadrant, as well as the position of the 0- electron peak.
+    * `cal_corr_proc_skp_example_file_1_*.csv`
+        * CSV that contains the gain and the noise from the Gaussian fits for each quadrant. Aditionally it saves RUNID, LTANUMBER and the readout time of one pixel
+
+<td align="center">
+	<img src="./images/cal.jpeg?raw=true" />
+</td>
+
+
+## `skExtract.exe`
+
+At this point if you are not going to use a ROOT (or [pyROOT!]) environment to analyse your data you should be done. However, a big effort has been invested in creating multiple tools that enables using ROOT for data analysis. For more about ROOT see [here](https://root.cern.ch).  
+
+The [skExtract.exe] script aims to create a ROOT file ready to be analysed. It specializes in DM analysis but multiple TBranches of it may be used for other goals/projects (neutrinos, high energy events and other low or high energy physics). It runs on C++ and needs to be compiled before using it for the first time. It requires [ROOT] and [CFITSIO] to be installed (see `skipper2root` above for further instructions). Multiple things happen at `skExtract.exe`:
+
+* __Calibration__: given a calibration for each quadrant and image by `cal.py` each averaged pixel is divided by its gain. This allows us to set a threshold that discriminate empty pixels from non-empty pixels.
+
+* __Clustering__: given a threshold (and after achieving sub-electron noise) a simple clustering routine is defined: given a non-empty pixel a cluster is defined. Its inmediate (adyacent or diagonal,  if specified) neighbours will be added depending on whether they are non-empty pixels as well. Clustering pixels will allow us to study each multi-electron event separately.
+
+* __Masking__:  a set of rules are created that define a set of masks or, in a more rigorous language, a event-selection criteria.  This criteria will work on both pixels (see _buildMask_ function inside `skExtract.exe`) and clusters (see _maskClusters_), separately.  The list of masks is defined in [globalConstants.cc] from 0 to 16384. The criterias are heavily specialized in DM analysis so most of them may not be useful for regular analysis.
+
+* __Trees__: two main TTrees are created by `skExtract.exe`: `calPixTree` and `hitSumm`. 
+	* `calPixTree`:  it contains information about individual pixels, without clustering. Therefore this is the TTree used for single-electron analysis. It contains information about masks.
+	* `hitSumm`: each cluster defined in the clustering process is saved as an entry of this TTree. Useful information of each cluster can be found as TBranches in this TTree, from number of pixels per cluster to the "roundness of a cluster". This is the TTree used for multi-electron analysis.
+
+#### Usage:
+
+> skExtract.exe -p crosstalk_proc_skp_example_file_1_.fits -c extractConfig_1.xml -C cal_corr_proc_skp_example_file_1_1.xml corr_proc_skp_example_file_1_1.fits
+
+Which for the 2nd module would be:
+
+> skExtract.exe -p crosstalk_proc_skp_example_file_1_.fits -c extractConfig_2.xml -C cal_corr_proc_skp_example_file_1_2.xml corr_proc_skp_example_file_1_2.fits
+
+#### Arguments:
+
+-   `-p:` \<optional mask file\> to provide a partial bad pixels mask, which will be or-ed with the internally computed one. Here \<optional mask file\> is crosstalk_proc_skp_example_file_1_.fits
+-   `-c:`  \<extract config xml file\> to specify the config file to use. If missing, "extractConfig.xml" from the current dir will be used. Here \<extract config xml file\> is extractConfig_1.xml for module 1 and extractConfig_2.xml for module 2
+-   `-C:` \<extract calibration xml file\> to specify the calibration file to use, if separate. Here \<extract calibration xml file\> is cal_corr_proc_skp_example_file_1_1.xml for module 1 and cal_corr_proc_skp_example_file_1_2.xml for module 2. 
+
+#### Inputs:
+
+* `crosstalk_proc_skp_example_file_1_.fits:` crosstalk maskfile from [cross-talk] as explained above. It's the same for both modules.
+* `extractConfig_1.xml:` XML file that configures how `skExtract` will run. A detailed explanation of its attributes can be found below
+* `cal_corr_proc_skp_example_file_1_1.xml:` XML file that contains information about calibration, as explained in `cal,py ` section.
+* `corr_proc_skp_example_file_1_1.fits:` FITS file that will be used as data input.
+
+#### Outputs:
+* `hits_corr_proc_skp_example_file_1_1.root:` ROOT file that contains all processed data, divided in TTree and TBranches.
+
+<td align="center">
+	<img src="./images/skExtract.jpeg?raw=true" />
+</td>	
+	
+
+#### About extractConfig_\*.xml
+
+As an XML file it's structured by tags. Those would be the following:
+* `badCols:`List of bad columns for each quadrant. These will be masked up by 1024 mask. This list is common for all images of the same run and it's an output of [hotcol.py] (explained below).
+* `badPixels:` List of bad pixels for each quadrant. These will be masked up by 512 mask. This list is common for all images of the same run and it's an output of [hotcol.py] (explained below). 
+* `bleedCols:`List of columns that show and excess of vertical bleeding due to defects. An extended bleed mask will be applied to these as 4096 mask. This list is common for all images of the same run and it's an output of [hotcol.py] (explained below).
+* `bleedXEdges:`A column value from which all pixels to the right will be masked by bleeding mask (4 mask). This was motivated by high bleeding in C modules (long serial register CCDs). This list is common for all images of the same run and it's an output of [hotcol.py] (explained below).
+* `cuts:`Several important variables are defined here.
+	* `epix:`normalized ADU threshold between empty and non-empty pixels.
+	* `bleedX:`number of pixels used for bleeding mask (4 mask) in the x-direction
+	* `bleedY:`number of pixels used for bleeding mask (4 mask) in the x-direction
+	* `halo: `number of pixels used for halo mask (8 mask)
+	* `clusterThr:` establishes the e- threshold used for Low Cluster Mask (8192 mask).
+	* `clusterCut:`establishes the halo radius used for Low Cluster Mask (8192 mask).
+* `extra:`
+	* `looseClusterNoNeighbours:`If True loose clustering routine (mask 2048) will use only single-electron clusters as seeds.
+	* `useDiagonalPix:`If True script will use diagonal pixels during clustering
+	* `saveTracks:` Always set as True.
+	* `saveTrackcuts:` Always set as True.
+* `systemConfig:`Do not touch.
+
+## `Hot columns and pixels`
+
+The script [hotcol.py] uses statistical analysis to generate a list of pixels and columns that should be considered during the masking process in `skExtract`. The list of pixels that should be masked are called bad pixels and the list of columns is bad columns. Both bad pixels and bad columns are estimated as excess signal and are physically motivated from defects in the CCD.
+
+### `cutHists.py`
+
+In order to run `hotcol.py` it is needed to firstly run [cutHists.py] that will generate a ROOT file (and a PDF file) with some histograms `hotcol.py` needs. This kind of masks is usually used for DM analysis and requires a large list of files. We will list those files as `hits_corr_proc_skp_example_file_*_*.root` and run `cutHists.py` as follows:
+
+> python cutHists.py hits_corr_proc_skp_example_file_1_1.root
+
+This will give us two outputs: `cutHists_hits_corr_proc_skp_example_file_1_1.root` and `cutHists_hits_corr_proc_skp_example_file_1_1.pdf` both containing  the needed histograms for `hotcol.py`. 
+
+`cutHists.py` should also be run for the rest of the files. Afterwards all files should be merged in the following way:
+
+> hadd cutHists_1.root cutHists_hits_corr_proc_skp_example_file_*_1.root
+
+and the same for the second module.
+
+### `hotcol.py`
+
+As said before, [hotcol.py] uses statistical analysis to generate a list of pixels and columns. 
+
+#### Usage:
+
+> hotcol.py -p cutHists_1.root -o hotcol_1
+
+Which for the 2nd module would be:
+
+> hotcol.py -p cutHists_2.root -o hotcol_2
+
+#### Arguments:
+
+-   `-p:`  find bad pixels.
+-   `-o:`  provide an output name (optional).
+
+#### Inputs:
+
+* `cutHists_*.root:` ROOT file that contains the histograms `hotcol.py` needs to compute bad pixels and columns.
+
+#### Outputs:
+
+* `hotcol_*.pdf:` PDF file that contains several plots used by the script to compute bad pixels and bad columns.
+* `hotcol_*.root:` ROOT file that contains histograms printed in `hotcol_*.pdf`.
+* `hotcol_*.xml:` XML file that contains an organized list of bad pixels and bad columns.
+
+<td align="center">
+	<img src="./images/hotcol.jpeg?raw=true" />
+</td>	
+	
+	
+After this step is done all data needs to be re-processed by `skExtract.exe` changing `extractConfig_*.xml` so that the bad pixels and bad columns list from `hotcol_*.xml` is added.
+
+## Example: 4x4 binned image
+
+In order to visualize this introduction let's do an example from a C-supermodule image. As of today, this data can be found at  `/data/sensei_backups/mkidsts1/Soft_ltaDaemon_images/2021-10-01_QA` in `jiji` (This instruction will not cover how to access data nor how to copy it into your local machine). We will use just one supermodule image (that is two regular images) from a QA test done at FNAL. These files will be:
+
+>skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.fz
+>skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.fz
+
+The long names come from configuration used for data-taking that will also not be covered in this instruction. We will do this in two ways:
+
+* Step by step in the terminal.
+* Using a python script.
+
+The idea is to increase the data-processing speed as the coding will get more complex (specially to non-bash users). 
+
+Before starting let's create all aliases we need in our terminal. Again, I'll assume you're using an Unix-based system and a bash Shell. Also, I'll assume you have downloaded all necessary repositories in `~`. Using your favorite text editor and sudo open `~/.bashrc` and type the following at the very end.
+
+```bash
+# SENSEI data procesing
+alias cal.py = '~/AnalysisTools/pyroot/cal.py'
+alias cutHists.py = '~/AnalysisTools/pyroot/cutHists.py'
+alias hotcol.py = '~/AnalysisTools/pyroot/hotcol.py'
+alias cross-talk.py = '~/AnalysisTools/utils/cross-talk.py'
+alias skipper2root.exe = '~/skipper2root/skipper2root.exe'  
+alias skExtract.exe = '~/skExtract/skExtract.exe'
+```
+
+This can also be done at `~./bash_aliases`
+
+Now, let's get started.
+
+### Step by step
+
+#### skipper2root
+
+> skipper2root.exe -idBg 4.0 skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.fz
+ 
+> skipper2root.exe -idBg 4.0 skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.fz
+
+or
+
+> ls skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_*_59.fz | xargs -L1 skipper2root.exe -idBg 4.0
+
+As the name of both files are almost the same except for module number. See how we have set  \<gainmult\> at 4.0 as this is the gain configuration for the system where the tests we carried out.
+
+#### crosstalk
+
+> python cross-talk.py -g 4.0 proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.fits
+
+> python cross-talk.py -g 4.0 proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.fits
+
+or
+
+>ls proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_*_59.fits | xargs -L1 python cross-talk.py -g 4.0
+
+#### calibration
+
+>python cal.py -dg 4.0 -c crosstalk_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.fits corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.fits
+
+> python cal.py -dg 4.0 -c crosstalk_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.fits corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.fits
+
+#### skExtract
+
+> skExtract.exe -p crosstalk_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.fits -c extractConfig_1.xml -C cal_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.xml corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.fits
+
+> skExtract.exe -p crosstalk_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.fits -c extractConfig_2.xml -C cal_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.xml corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.fits
+
+For extractConfig_*.xml (both 1 and 2) use the following default configuration:
+
+```xml
+<extractConfig>
+
+    <cuts
+        epix="0.7"
+        bleedX="100"
+        bleedY="100"
+        halo="100" 
+        clusterThr="5"
+        clusterCut="4"
+        />
+
+    <extra
+        looseClustersNoNeighbors="0"
+        useDiagonalPix="1"
+        saveTracks="1"
+        saveTrackCuts="1"
+        />
+
+    <systemConfig
+        stackSize="256"
+        hitMaxSize="5000"
+        /> 
+</extractConfig>
+```
+
+#### Hot columns and pixels
+
+> python cutHists.py hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.root
+
+> python cutHists.py hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.root
+
+or
+
+> ls hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_*_59.root | xargs -L1 python cutHists.py
+
+So now we have `cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.root` and `cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.root`
+
+The idea now is using `hadd` to merge all files with the same data-taking configuration (exposure time, readout time, temperature, etc) and same module. This can be done in many ways and in this case in particular it's senseless as we have two files with two different data-taking configurations. For the sake of the example, let's image we have two other files: `cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_57.root` and `cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_57.root` (these files actually exist if you wanna look for them) so if we want to use hadd we would do:
+
+> hadd cutHists_1.root cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_57.root cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_59.root
+
+> hadd cutHists_2.root cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_57.root cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_59.root
+
+or
+
+> hadd cutHists_1.root cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_1_*.root 
+
+> hadd cutHists_2.root cutHists_hits_corr_proc_skp_moduleC56_C57-lta52_19-ssc30_31_test1_binned_NROW80_NBINROW8_NCOL400_NBINCOL8_EXPOSURE0_2_*.root 
+e 
+Now we can use `hotcol.py`.
+
+> python hotcol.py -p cutHists_1.root -o hotcol_1
+
+> python hotcol.py -p cutHists_2.root -o hotcol_2
+
+And, after copying the contents of the `XML` file into `extractConfig_*xml` re run `skExtract` exactly as above.
+
+### Python script
+
+The idea of the python script is to automatically update the names of files. We hope you can find it useful or inspiratory to your own purpose as well. See `run.py`.
+
+[SENSEI2020]: <https://github.com/sensei-skipper/AnalysisTools/tree/master/pyroot>
+[ROOT]: <https://root.cern/>
+[CFITSIO]: <https://heasarc.gsfc.nasa.gov/docs/software/fitsio/fitsio.html>
+[skipper2root]: <https://github.com/sensei-skipper/skipper2root>
+[TTrees]: <https://root.cern.ch/doc/master/classTTree.html>
+[ds9]: <https://sites.google.com/cfa.harvard.edu/saoimageds9>
+[astrofits.io.fits]: <https://docs.astropy.org/en/stable/io/fits/index.html>
+[cross-talk]: <https://github.com/sensei-skipper/AnalysisTools/blob/sho/utils/cross-talk.py>
+[cal.py]: <https://github.com/sensei-skipper/AnalysisTools/tree/sho/pyroot>
+[pyROOT!]: <https://root.cern/manual/python/>
+[skExtract.exe]: <https://github.com/sensei-skipper/skextract/blob/dev/skExtract.cc>
+[globalConstants.cc]: <https://github.com/sensei-skipper/skextract/blob/dev/globalConstants.cc>
+[hotcol.py]: <https://github.com/sensei-skipper/AnalysisTools/blob/sho/pyroot/hotcol.py>
+[cutHists.py]: <https://github.com/sensei-skipper/AnalysisTools/blob/sho/pyroot/cutHists.py>
+
