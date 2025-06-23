@@ -90,6 +90,8 @@ void SetOhdu2Style(TH1 *h1){
 string filename{"/home/eliana/Documentos/Atucha/images/run_40/hits/hits_corr_proc_run_40_01Feb2025__EXP1_NSAMP300_VSUB70_img99.root"};
 double xc{0.655};
 double xc_oh2{0.610};
+double xc_ohdu1_ov{0.0};
+double xc_ohdu2_ov{0.0};
 
 double Nmax{};
 double RN_1{};
@@ -100,6 +102,16 @@ double lamb_1{};
 double err_lamb_1{};
 double lamb_2{};
 double err_lamb_2{};
+
+double lamb_1_ov{};
+double err_lamb_1_ov{};
+double RN_1_ov{};
+double err_RN_1_ov{};
+
+double lamb_2_ov{};
+double err_lamb_2_ov{};
+double RN_2_ov{};
+double err_RN_2_ov{};
 
 // Variables for exporting to archivo
 double time_expo{0};
@@ -301,28 +313,30 @@ void RN_SER_umbral(){
 	epix_ohdu1_overscan_hist->Scale(1./epix_ohdu1_overscan_hist->Integral(), "WIDTH");
 	epix_ohdu2_actar_hist->Scale( 1./epix_ohdu2_actar_hist->Integral(),"WIDTH");
 	epix_ohdu2_overscan_hist->Scale(1./epix_ohdu2_overscan_hist->Integral(), "WIDTH");
+	//Clones de ohdu histograms ···
+	TH1*ohdu1_overscan_hc = (TH1*)epix_ohdu1_overscan_hist->Clone();
+	TH1*ohdu2_overscan_hc = (TH1*)epix_ohdu2_overscan_hist->Clone();
 	
 	//··················
 	//Ajustes 		····
 	//··················
-	//Ruido de lectura: Suma de dos gaussianas con igual varianza.
-	cout << '\n' << endl;
-	cout << " ---------- OHDU 1 OVERSCAN -------------" << endl;
+	//OVERSCAN ··············· Solo Ruido de lectura: Suma de dos gaussianas con igual varianza ·······················
 	TF1*total_gauss = new TF1("G0+G1","[0]*exp(-0.5*pow((x-[1])/[2],2)) + [3]*exp(-0.5*pow((x-[4])/[2],2))", -1.0,1.5);//
 	total_gauss->SetLineColor(kMagenta-4);
-	// ohdu 1 ···
 	//Inicializo parámetros
 	total_gauss->SetParameters(1.5,0.0003, 0.22, 3.0, 1.0);
 	total_gauss->SetParLimits(2,0.17, 0.25);
 	//total_gauss->FixParameter(1,0);
 	//total_gauss->FixParameter(4,1);
-	//Ajuste ····
+	
+	// ohdu 1 ···
+	/*cout << '\n' << endl;
+	cout << " ---------- OHDU 1 OVERSCAN G0+G1 -------------" << endl;
 	//“Q” Quiet mode (minimum printing); “S” The result of the fit is returned in the TFitResultPtr; "R" to restrict the fit to the range specified in the TF1 constructor
 	auto result01=epix_ohdu1_overscan_hist->Fit("G0+G1", "R+S");
 	double pvalue01 = ROOT::Math::chisquared_cdf_c(result01->Chi2(), result01->Ndf());
 	RN_1 = result01 -> Parameter(2);
 	err_RN_1 = result01 -> ParError(2);
-
 	cout << '\n' << endl;
 	cout << "pvalue OVERSCAN = " << pvalue01 << endl;
 	cout << "" << RN_1 << endl;
@@ -330,7 +344,7 @@ void RN_SER_umbral(){
 
 	// ohdu 2 ···
 	cout << '\n' << endl;
-	cout << " ------------- OHDU 2 OVERSCAN ------------" << endl;
+	cout << " ------------- OHDU 2 OVERSCAN G0+G1 ------------" << endl;
 	result01=epix_ohdu2_overscan_hist->Fit("G0+G1", "R+S");
 	pvalue01 = ROOT::Math::chisquared_cdf_c(result01->Chi2(), result01->Ndf());
 	RN_2 = result01 -> Parameter(2);
@@ -339,10 +353,52 @@ void RN_SER_umbral(){
 	cout << "pvalue OVERSCAN  = " << pvalue01 << endl;
 	cout << RN_2 << endl;
 	cout << err_RN_2 << endl;
-
-	//SER: Poisson convolucionada con gaussiana
+*/
+	// SER + Ruido de lectura: Poisson convolucionada con gaussiana ·······················
 	TF1 *pgc = new TF1("poisson_gauss_conv", poisson_gauss_conv, -1, 2,4);//(,, x_lim_inf, x_lim_sup, #parameters)
 	Nmax= 1;
+	//pgc->SetParameters(0.2,0.03, 1.0); //lambda, mu, normalización. Inicializo.
+	pgc->SetParameters(0.2,0.03, 1.0, 0.21); //lambda, mu, normalización, sigma. Inicializo.
+	pgc->SetLineColor(kMagenta-4);//kOrange-3);
+	
+	//OVERSCAN ··············
+	//ohdu 1 ····
+	cout << '\n' << endl;
+	cout << " --------- OHDU 1 OVERSCAN Convolution Poisson-Gauss--------- " << endl;
+	auto result03 = ohdu1_overscan_hc->Fit("poisson_gauss_conv", "R+S");
+	double pvalue03 = ROOT::Math::chisquared_cdf_c(result03->Chi2(), result03->Ndf());
+	lamb_1_ov = result03 -> Parameter(0);
+	err_lamb_1_ov = result03 -> ParError(0);
+	RN_1_ov = result03 -> Parameter(3);
+	err_RN_1_ov = result03 -> ParError(3);
+	xc_ohdu1_ov = 0.5 - pow(RN_1_ov,2)*TMath::Log(lamb_1_ov);
+
+	cout << '\n' << endl;
+	cout << " OHDU 1 " << endl;
+	cout << "pvalue OVERSCAN  = " << pvalue03 << endl;
+	cout << "lambda ohdu 1 = " << std::setprecision(9) << lamb_1_ov << " +- " << err_lamb_1_ov << endl;
+	cout << "sigma ohdu 1 = " << std::setprecision(9) << RN_1_ov << " +- " << err_RN_1_ov << endl;
+	cout << "xc = " << xc_ohdu1_ov << endl;
+	
+	//ohdu 2 ····
+	cout << '\n' << endl;
+	cout << " --------- OHDU 2 OVERSCAN  Convolution Poisson-Gauss --------- " << endl;
+	result03 = ohdu2_overscan_hc->Fit("poisson_gauss_conv", "R+S");
+	pvalue03 = ROOT::Math::chisquared_cdf_c(result03->Chi2(), result03->Ndf());
+	lamb_2_ov = result03 -> Parameter(0);
+	err_lamb_2_ov = result03 -> ParError(0);
+	RN_2_ov = result03 -> Parameter(3);
+	err_RN_2_ov = result03 -> ParError(3);
+	xc_ohdu2_ov = 0.5 - pow(RN_2_ov,2)*TMath::Log(lamb_2_ov);
+
+	cout << '\n' << endl;
+	cout << " OHDU 1 " << endl;
+	cout << "pvalue OVERSCAN  = " << pvalue03 << endl;
+	cout << "lambda ohdu 2 = " << std::setprecision(9) << lamb_2_ov << " +- " << err_lamb_2_ov << endl;
+	cout << "sigma ohdu 2 = " << std::setprecision(9) << RN_2_ov << " +- " << err_RN_2_ov << endl;
+	cout << "xc = " << xc_ohdu2_ov << endl;
+	
+
 	//N(0,noise) y N(1,noise) ··········
 	TF1 * N0noise = new TF1("normal_0_noise", "gaus(0)", -0.5,1.5);//
 	TF1 * N1noise = new TF1("normal_1_noise", "gaus(0)", -0.5,1.5);//gaus(0) = [0]*exp(-0.5*((x-[1])/[2])**2) and (0) means start numbering parameters at 0
@@ -353,12 +409,10 @@ void RN_SER_umbral(){
 	N0noise_oh2->SetLineColor(kGray+2);
 	N1noise_oh2->SetLineColor(kOrange+2);
 	
+	//AREA ACTIVA ··············
 	//ohdu 1 ····
 	cout << '\n' << endl;
 	cout << " --------- OHDU 1 ACTIVE AREA --------- " << endl;
-	//pgc->SetParameters(0.2,0.03, 1.0); //lambda, mu, normalización. Inicializo.
-	pgc->SetParameters(0.2,0.03, 1.0, 0.21); //lambda, mu, normalización, sigma. Inicializo.
-	pgc->SetLineColor(kMagenta-4);//kOrange-3);
 	auto result02 = epix_ohdu1_actar_hist->Fit("poisson_gauss_conv", "R+S");
 	double pvalue02 = ROOT::Math::chisquared_cdf_c(result02->Chi2(), result02->Ndf());
 	lamb_1 = result02 -> Parameter(0);
@@ -401,7 +455,6 @@ void RN_SER_umbral(){
 	xc = 0.5 - pow(RN_2,2)*TMath::Log(lamb_2);	
 	error_tipo1_N0 = ROOT::Math::normal_cdf_c(xc, result02 -> Parameter(3),0);
 	error_tipo1_N1 = result02->Parameter(0)*(ROOT::Math::normal_cdf(xc, result02 -> Parameter(3),1));
-	//double lamb2_recalcul = 
 
 	cout << '\n' << endl;
 	cout << " OHDU 2 " << endl;
@@ -414,9 +467,10 @@ void RN_SER_umbral(){
 	cout << '\n' << endl;
 	
 	//Graficar resultados
-	TCanvas * c_pgc = new TCanvas("c_pgc", "SEE_Sim", 1200, 800);
+	/*TCanvas * c_pgc = new TCanvas("c_pgc", "SEE_Sim", 1200, 800);
 	c_pgc->SetGrid();
 	pgc->Draw();
+	*/
 
 	//Grafico OVERSCAN ···
 	TCanvas * c1 = new TCanvas("c1", "Charge histogram", 1200, 800);
@@ -428,7 +482,7 @@ void RN_SER_umbral(){
 	c1->SetGrid();
 	SetOhdu1Style(epix_ohdu1_overscan_hist);
 	epix_ohdu1_overscan_hist->SetTitle("Overscan");//calPixTree
-	epix_ohdu1_overscan_hist->GetYaxis()->SetRangeUser(1e-3,2);
+	epix_ohdu1_overscan_hist->GetYaxis()->SetRangeUser(1e-4,1e1);
 	epix_ohdu1_overscan_hist->SetStats(0);
 	gPad->SetLogy();
     gPad->SetGrid();
@@ -443,13 +497,29 @@ void RN_SER_umbral(){
 	SetOhdu2Style(epix_ohdu2_overscan_hist);
 	gPad ->SetLogy();
     gPad->SetGrid();
-	epix_ohdu2_overscan_hist->SetTitle("calPixTree");
+	epix_ohdu2_overscan_hist->SetTitle("Overscan");
+	epix_ohdu2_overscan_hist->GetYaxis()->SetRangeUser(1e-4,1e1);
 	epix_ohdu2_overscan_hist->Draw();//"same"
 
 	auto l2_RN = new TLegend(0.55,0.65,0.90,0.75); 
     l2_RN->AddEntry(epix_ohdu2_overscan_hist,"ohdu 2","l");
     l2_RN->AddEntry(total_gauss,"N(0,RN) + N(1,RN)");
     l2_RN->Draw();
+
+    //Poisson convolucionada con Gauss ·····························
+    TCanvas * c2 = new TCanvas("c2", "Charge histogram", 1200, 800);
+	//gStyle->SetOptStat(1);
+	c2 ->SetLogy();
+	c2->Divide(2,1);
+	//ohdu 1 ····
+	c2->cd(1);
+	c2->SetGrid();
+	ohdu1_overscan_hc->Draw();
+
+	//ohdu 2 ····
+	c2->cd(2);
+	c2->SetGrid();
+	ohdu2_overscan_hc->Draw();
 
 	//Graficos en area activa ·············	
 	TCanvas * c1AA = new TCanvas("c1AA", "Charge histogram active area", 1200, 800);
