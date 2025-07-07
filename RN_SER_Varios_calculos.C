@@ -1,16 +1,17 @@
 /* Autora: E.Depaoli Fecha inicial: 24/04/2025
 Código para calcular el ruido de lectura y el SEE de las imágenes de Atucha 
 utilizando los catálogos hits_corr_proc_run*.root. Calcula el p-valor del ajuste.
--> Histograma de ePix en calPixTree restringida al overscan, para cada extensión. 
-Ajusta cada histograma con una suma de 2 gaussianas. Guarda en un archivo el sigma (ruido de
-lectura), su incerteza y el p-valor del ajuste.
--> Calcula cluster_1e como la suma del número de eventos que ocupan 1 pxl y tienen
-1 electrón (n == 1.0 && e == 1.0) en las extensiones 1 y 2. 
+-> Histograma de carga sin clusterizar (ePix en calPixTree) restringida a los dos overscans, X e Y, para cada extensión. 
+No se contabiliza carga en píxeles de columnas brillantes.
+Ajusta cada histograma con la convolución entre Poisson y Gauss. Parámetros que se obtienen de este ajuste: el ruido de lectura, SER*tiempo.
+-> Calcula cluster_1e como la suma del número de eventos que ocupan 1 pxl y tienen 1 electrón (n == 1.0 && e == 1.0) 
+en todas las extensiones. Calcula cluster_almenos_1e +=n 
 SEE = cluster_1e/N_tot_pxls/t_exposición
--> Histograma de carga en el área activa de los cuadrantes 1 y 2 separados (los que tienen menor ruido de lectura) usando
-ePix en calPixTree, habiendo eliminado las columnas brillantes que venimos usando. Ajusto con la convolución entre 
-Poisson y Gauss. Parámetros que se obtienen de este ajuste: el ruido de lectura, SER*tiempo.
-
+Occupancy = cluster_almenos_1e/N_tot_pxls/t_exposición_imagen
+-> Calcula umbrales a partir de una relación que se obtiene al igualar las densidades de probabilidad de los picos de
+0 y de 1 electrón. Esta cuenta surge de igualar los errores de tipo 1 y luego derivar aplicando el teorema fundamental
+del cálculo. No está bien este resultado, como lo demuestra el hecho de que no se cumple que los errores de tipo 1 
+efectivamente den iguales. La diferencia entre ellos es del 30 al 60 %. HAY QUE IMPLEMENTAR LA TABLA (xc, lambda, RN)
 Observaciones:
 -> El pico de 0 e- del OHDU 1 tiene menor altura que el del OHDU 2 porque su sigma 
 es mayor
@@ -92,10 +93,10 @@ void SetOhdu2Style(TH1 *h1){
 //string filename{"/home/eliana/Documentos/Atucha/images/run_40/hits/hits_corr_proc_run_40_01Feb2025__EXP1_NSAMP300_VSUB70_img99.root"};
 string filename{"/home/eliana/Documentos/Atucha/images/hits_corr_proc_run_43_31Mar2025__EXP1_NSAMP300_VSUB70_img17.root"};
 
-double xc{0.655};
+double xc_oh1{0.655};
 double xc_oh2{0.610};
-double xc_ohdu1_ov{0.0};
-double xc_ohdu2_ov{0.0};
+double xc_ohdu1_ovx{0.0};
+double xc_ohdu2_ovx{0.0};
 
 double Nmax{};
 //Estimadores ·············································································
@@ -106,8 +107,8 @@ double lamb_1{}; double err_lamb_1{};
 double lamb_2{}; double err_lamb_2{};
 double N1_N0_actar_oh1{}; double N1_N0_actar_oh2{}; double N1_N0_actar_oh3{}; double N1_N0_actar_oh4{};
 //Overscan ·····
-double RN_1_ov{}; double err_RN_1_ov{};
-double RN_2_ov{}; double err_RN_2_ov{};
+double RN_1_ovx{}; double err_RN_1_ovx{};
+double RN_2_ovx{}; double err_RN_2_ovx{};
 double lamb_1_ov{}; double err_lamb_1_ov{};
 double lamb_2_ov{}; double err_lamb_2_ov{};
 double N1_N0_ovx_oh1{}; double N1_N0_ovx_oh2{}; double N1_N0_ovx_oh3{}; double N1_N0_ovx_oh4{};
@@ -428,21 +429,39 @@ void RN_SER_Varios_calculos(){
 	//OVERSCAN ··············
 	cout << '\n' << endl;
 	cout << " --------- OVERSCAN X --------- " << endl;
-	
 	// --------- Convolution Poisson-Gauss---------;
+
 	cout << " OHDU 1 " << endl;
 	auto resultovx = epix_ohdu1_ovx_hist->Fit("poisson_gauss_conv", "R+S");//+Q
 	double pvalueovx = ROOT::Math::chisquared_cdf_c(resultovx->Chi2(), resultovx->Ndf()); //	cout << "pvalue OVERSCAN  = " << pvalueovx << endl;
-	lamb_1_ov = resultovx -> Parameter(0); err_lamb_1_ov = resultovx -> ParError(0); RN_1_ov = resultovx -> Parameter(3); err_RN_1_ov = resultovx -> ParError(3); xc_ohdu1_ov = 0.5 - pow(RN_1_ov,2)*TMath::Log(lamb_1_ov);
+	lamb_1_ov = resultovx -> Parameter(0); err_lamb_1_ov = resultovx -> ParError(0); RN_1_ovx = resultovx -> Parameter(3); err_RN_1_ovx = resultovx -> ParError(3); xc_ohdu1_ovx = 0.5 - pow(RN_1_ovx,2)*TMath::Log(lamb_1_ov);
+	xc_ohdu1_ovx = 0.5 - pow(RN_1_ovx,2)*TMath::Log(lamb_1_ov);	//Ver cálculo en cuaderno
+	//Error tipo 1 resultante ····· 
+	double error_tipo1_N0 = ROOT::Math::normal_cdf_c(xc_ohdu1_ovx,RN_1_ovx);//, 1);// (double x, double sigma=1, double x0=0)
+	double error_tipo1_N1 = lamb_1_ov*(ROOT::Math::normal_cdf(xc_ohdu1_ovx,RN_1_ovx,1));//
+
 	cout << "pvalue = " << pvalueovx << endl;
 	cout << "SER ohdu 1 = " << std::setprecision(9) << lamb_1_ov / t_media_ov_px << " +- " << err_lamb_1_ov / t_media_ov_px << endl;
+	cout << "xc ohdu 1 = " << xc_ohdu1_ovx << endl;
+	cout << "error_tipo1_N0 = " << error_tipo1_N0 << endl;
+	cout << "error_tipo1_N1 = " << error_tipo1_N1 << endl;
+	
 	cout << '\n' << endl;
 	cout << " OHDU 2 " << endl;
 	resultovx = epix_ohdu2_ovx_hist->Fit("poisson_gauss_conv", "R+S");//+Q
 	pvalueovx = ROOT::Math::chisquared_cdf_c(resultovx->Chi2(), resultovx->Ndf());
-	lamb_2_ov = resultovx -> Parameter(0); err_lamb_2_ov = resultovx -> ParError(0); RN_2_ov = resultovx -> Parameter(3);	err_RN_2_ov = resultovx -> ParError(3); xc_ohdu2_ov = 0.5 - pow(RN_2_ov,2)*TMath::Log(lamb_2_ov);
+	lamb_2_ov = resultovx -> Parameter(0); err_lamb_2_ov = resultovx -> ParError(0); RN_2_ovx = resultovx -> Parameter(3);	err_RN_2_ovx = resultovx -> ParError(3); xc_ohdu2_ovx = 0.5 - pow(RN_2_ovx,2)*TMath::Log(lamb_2_ov);
+	xc_ohdu2_ovx = 0.5 - pow(RN_2_ovx,2)*TMath::Log(lamb_2_ov);	//Ver cálculo en cuaderno
+	//Error tipo 1 resultante ····· 
+	error_tipo1_N0 = ROOT::Math::normal_cdf_c(xc_ohdu2_ovx,RN_2_ovx);//, 1);// (double x, double sigma=1, double x0=0)
+	error_tipo1_N1 = lamb_2_ov*(ROOT::Math::normal_cdf(xc_ohdu2_ovx,RN_2_ovx,1));//
+	
 	cout << "pvalue = " << pvalueovx << endl;
 	cout << "SER ohdu 2 = " << std::setprecision(9) << lamb_2_ov/ t_media_ov_px  << " +- " << err_lamb_2_ov/ t_media_ov_px  << endl;
+	cout << "xc ohdu 2 = " << xc_ohdu2_ovx << endl;
+	cout << "error_tipo1_N0 = " << error_tipo1_N0 << endl;
+	cout << "error_tipo1_N1 = " << error_tipo1_N1 << endl;
+	
 	cout << '\n' << endl;
 
 	//Grafico OVERSCAN X ···
@@ -465,10 +484,8 @@ void RN_SER_Varios_calculos(){
 	c1->cd(2);
 	gPad->SetLogy();
     gPad->SetGrid();
-    //epix_ohdu2_ovx_hist->GetYaxis()->SetTitleOffset(0.8);
 	SetOhdu1Style(epix_ohdu2_ovx_hist);
 	epix_ohdu2_ovx_hist->Draw();
-
 
 	TObjArray *tokens = TString(filename).Tokenize("_, .");
 	TString OVX_out = ((TObjString*)tokens->At(3))->GetString() + "_" + ((TObjString*)tokens->At(4))->GetString()+ "_" + ((TObjString*)tokens->At(9))->GetString() + "_OVX" + ".png";
@@ -491,15 +508,21 @@ void RN_SER_Varios_calculos(){
 	//ohdu 1 ····
 	auto resultovy = epix_ohdu1_ovy_hist->Fit("poisson_gauss_conv", "R+S");
 	double pvalueovy = ROOT::Math::chisquared_cdf_c(resultovy->Chi2(), resultovy->Ndf());
-	lamb_1 = resultovy -> Parameter(0); err_lamb_1 = resultovy -> ParError(0); RN_1 = resultovy -> Parameter(3); err_RN_1 = resultovy -> ParError(3); xc = 0.5 - pow(RN_1,2)*TMath::Log(lamb_1);
+	lamb_1 = resultovy -> Parameter(0); err_lamb_1 = resultovy -> ParError(0); RN_1 = resultovy -> Parameter(3); err_RN_1 = resultovy -> ParError(3);
+	xc_oh1 = 0.5 - pow(RN_1,2)*TMath::Log(lamb_1);
+	//Error tipo 1 ····	
+	error_tipo1_N0 = ROOT::Math::normal_cdf_c(xc_oh1, RN_1,0);
+	error_tipo1_N1 = lamb_1*(ROOT::Math::normal_cdf(xc_oh1, RN_1,1));
+
 	cout << "pvalue = " << pvalueovy << endl;
 	cout << "SER ohdu 1 = " << std::setprecision(9) << lamb_1 / t_expo_overscan_y << " +- " << err_lamb_1 / t_expo_overscan_y << endl;
-	
+	cout << "xc ohdu 1 = " << xc_oh1 << endl;	
+	cout << "error_tipo1_N0 = " << error_tipo1_N0 << endl;
+	cout << "error_tipo1_N1 = " << error_tipo1_N1 << endl;
 	gPad->SetLogy();
     gPad->SetGrid();
 	SetOhdu1Style(epix_ohdu1_ovy_hist);
 	epix_ohdu1_ovy_hist->Draw();
-	//cout << "xc = " << xc << endl;
 		
 	//ohdu 2 ····
 	c2->cd(2);
@@ -516,12 +539,6 @@ void RN_SER_Varios_calculos(){
 	N1noise_oh2->SetLineColor(kOrange+2);
 	N0noise->SetParameters(pow(resultovy -> Parameter(3),-1)*pow(2*TMath::Pi(),-0.5), resultovy -> Parameter(1), resultovy -> Parameter(3));//resultovy -> Parameter(2)
 	N1noise->SetParameters(resultovy->Parameter(0)*pow(resultovy -> Parameter(3),-1)*pow(2*TMath::Pi(),-0.5), 1+resultovy -> Parameter(1), resultovy -> Parameter(3));
-	//Error tipo 1 resultante ····· 
-	double error_tipo1_N0 = ROOT::Math::normal_cdf_c(xc,RN_1);//, 1);// (double x, double sigma=1, double x0=0)
-	double error_tipo1_N1 = lamb_1*(ROOT::Math::normal_cdf(xc,RN_1,1));//
-	//cout << "error_tipo1_N0 = " << error_tipo1_N0 << endl;
-	//cout << "error_tipo1_N1 = " << error_tipo1_N1 << endl;
-	//cout << '\n' << endl;
 	//double lamb_recal = ROOT::Math::normal_cdf(-xc/RN_1)/ROOT::Math::normal_cdf((xc-1)/RN_1);
 	//cout << "lamb_recal = " << lamb_recal << endl;
 	cout << '\n' << endl;
@@ -532,20 +549,19 @@ void RN_SER_Varios_calculos(){
 	lamb_2 = resultovy -> Parameter(0); err_lamb_2 = resultovy -> ParError(0); RN_2 = resultovy -> Parameter(3); err_RN_2 = resultovy -> ParError(3);
 	//N0noise_oh2->SetParameters(pow(resultovy -> Parameter(3),-1)*pow(2*TMath::Pi(),-0.5), resultovy -> Parameter(1), resultovy -> Parameter(3));
 	//N1noise_oh2->SetParameters(resultovy->Parameter(0)*pow(resultovy -> Parameter(3),-1)*pow(2*TMath::Pi(),-0.5), 1+resultovy -> Parameter(1), resultovy -> Parameter(3));
+	xc_oh2 = 0.5 - pow(RN_2,2)*TMath::Log(lamb_2);
 	//Error tipo 1 ····	
-	//xc = 0.5 - pow(RN_2,2)*TMath::Log(lamb_2);	
-	//error_tipo1_N0 = ROOT::Math::normal_cdf_c(xc, resultovy -> Parameter(3),0);
-	//error_tipo1_N1 = resultovy->Parameter(0)*(ROOT::Math::normal_cdf(xc, resultovy -> Parameter(3),1));
+	error_tipo1_N0 = ROOT::Math::normal_cdf_c(xc_oh2, RN_2,0);
+	error_tipo1_N1 = lamb_2*(ROOT::Math::normal_cdf(xc_oh2, RN_2,1));
 
 	cout << "pvalue = " << pvalueovy << endl;
 	cout << "SER ohdu 2 = " << std::setprecision(9) << lamb_2 / t_expo_overscan_y << " +- " << err_lamb_2 / t_expo_overscan_y << endl;
+	cout << "xc ohdu 2 = " << xc_oh2 << endl;	
+	cout << "error_tipo1_N0 = " << error_tipo1_N0 << endl;
+	cout << "error_tipo1_N1 = " << error_tipo1_N1 << endl;
 	SetOhdu1Style(epix_ohdu2_ovy_hist);
 	epix_ohdu2_ovy_hist->Draw();
 	c2->SaveAs(OVY_out.Data());
-	//cout << "xc = " << xc << endl;
-	//cout << "error_tipo1_N0 = " << error_tipo1_N0 << endl;
-	//cout << "error_tipo1_N1 = " << error_tipo1_N1 << endl;
-	
 }
 
 //Information in leaves to local or global variables  ·································································
