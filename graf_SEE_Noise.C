@@ -38,71 +38,146 @@ void SEE_evolution_plot( vector<string> vecx, vector<Double_t> vecy,const int pa
 double date_to_seconds (string DATESTART);
 
 //Rutine ·······························································
-const char* filename = "/home/eliana/Documentos/Atucha/Scripts/SEE_RN/RN_SER_Atucha.txt";
-vector<double> RN_oh1_vec;
-vector<double> RN_error_oh1_vec;
-vector<double> RN_oh2_vec;
-vector<double> RN_error_oh2_vec;
+const char* filename = "/home/eliana/Documentos/Atucha/Scripts/SEE_RN/RN_SER_Atucha_r44.txt";
+vector<vector<double>> RN_vec(2);
+vector<vector<double>> err_RN_vec(2);
+vector<vector<double>> lamb_ovx_vec(2);
+vector<vector<double>> err_lamb_ovx_vec(2);
+vector<vector<double>> lamb_ovy_vec(2);
+vector<vector<double>> err_lamb_ovy_vec(2);
 vector<vector<double>> see_vec(4);//vector de vectores
 vector<vector<double>> occ_vec(4);
 vector<string> date_start_vec;//fecha y horario de inicio de toma de la imagen
 vector<double> RUNID_vec;
 vector<double> timestamp_date_start_vec;//timestamp
-//vector<string> ordered_date_start_vec;
-//vector<double> ordered_SEE_vec;
+
+TString run = "RUN_44";
+TString cfulloutdirname = TString(gSystem->pwd());
+
+double t_media_ov_px = 6.9942e-05 ;//[day]
+double t_expo_overscan_y = 0.018687 ;//[day]
+double exposure_oh1 = 2851;//[pxl*day]
+double exposure_oh2 = 2942 ;//[pxl*day]
+double exposure_oh3_4 = 3053;//[pxl*day]
+double readout_time_per_pxl_per_sample = 65.61;// [microsec].q
 
 void graf_SEE_Noise(){
-    archivo_a_vectores(RN_oh1_vec,RN_oh2_vec,filename, 14, 16); //ruido de lectura en columna 4, su error en columna 5
-    //archivo_a_vectores(RN_error_oh1_vec,RN_error_oh2_vec, filename, 6, 7);
-    for(int i{0}; i < 4; ++i) archivo_a_vectores(see_vec[i], occ_vec[i], filename, 2*i+2, 2*i+3);
 
-    for (int i{0}; i < occ_vec[0].size(); ++i){cout << occ_vec[3].at(i) << endl;}
+    for(int i{0}; i < 4; ++i) archivo_a_vectores(see_vec[i], occ_vec[i], filename, 2*i+2, 2*i+3);
+    for(int i{0}; i < 2; ++i) archivo_a_vectores(RN_vec[i], err_RN_vec[i], filename, 2*i+14, 2*i+15);
+    for(int i{0}; i < 2; ++i) archivo_a_vectores(lamb_ovx_vec[i], err_lamb_ovx_vec[i], filename, 2*i+10, 2*i+11);
+    for(int i{0}; i < 2; ++i) archivo_a_vectores(lamb_ovy_vec[i], err_lamb_ovy_vec[i], filename, 2*i+18, 2*i+19);
     archivo_a_string_vectores(date_start_vec,RUNID_vec,filename, 1, 0);
     
+    // Ver vectores en pantalla ·····
+    //for (int i{0}; i < lamb_ovy_vec[0].size(); ++i){cout << lamb_ovy_vec[0].at(i) << endl;}
+    
     //Plots ············
-    //SEE ···
-    TCanvas * c1 = new TCanvas("c1", "lambda", 1200, 800);
+    char color[4] = {kP10Yellow, kP10Violet, kP10Red,kP10Blue}; 
+    
+    //SER Overscan y ···
+    TCanvas * c5 = new TCanvas("c5", "lambda OVY", 1200, 800);
     gPad->SetGrid();
     //gStyle->SetOptStat(0);
-    TGraph *g[4];
-    for(int i=0; i < 4; ++i){
-        g[i] = new TGraph(RUNID_vec.size(), &RUNID_vec[0], &see_vec[i][0]);
-        g[i]->SetMarkerColor(i+102);//
-        g[i]->SetMarkerStyle(20); //
+    TGraphErrors *glambOVY[2];
+    for(int i=0; i < 2; ++i){
+        glambOVY[i] = new TGraphErrors(RUNID_vec.size(), &RUNID_vec[0], &lamb_ovy_vec[i][0], 0, &err_lamb_ovy_vec[i][0]);
+        glambOVY[i]->SetMarkerColor(color[i]);//
+        glambOVY[i]->SetLineColor(color[i]);//
+        glambOVY[i]->SetMarkerStyle(20+i); //
     
     }
 
-    g[0]->SetTitle("RUN 39");
-    g[0]->GetYaxis()->SetTitle("SEE [e-/pxl/day]");
-    g[0]->GetYaxis()-> SetRangeUser(0.7, 6.0);
-    g[0]->GetXaxis()->SetTitle("RUNID");
-    g[0]-> Draw("AP");
+    glambOVY[0]->SetTitle(run);
+    glambOVY[0]->GetYaxis()->SetTitle("SEE Overscan Y [e-/pxl/day]");
+    glambOVY[0]->GetYaxis()-> SetRangeUser(0.0, 1.0);
+    glambOVY[0]->GetXaxis()->SetTitle("RUNID");
+    glambOVY[0]-> Draw("AP");
 
-    for(int i=1; i < 4; ++i) g[i]->Draw("sameP");
+    for(int i=1; i < 2; ++i) glambOVY[i]->Draw("sameP");
     
-    auto l1 = new TLegend(0.75,0.75,0.90,0.90);
+    auto l5 = new TLegend(0.75,0.75,0.90,0.90);;//(0.75,0.10,0.90,0.30);
     
-    for (int i=0; i<4; i++) {
-      l1->AddEntry(g[i],TString:: Format("Ohdu %d", i+1), "p");
+    for (int i=0; i<2; i++) {
+      l5->AddEntry(glambOVY[i],TString:: Format("Ohdu %d", i+1), "p");
     }
 
-   l1->Draw();
+    l5->Draw();
 
-   //OCC ···
-    TCanvas * c2 = new TCanvas("c2", "lambda", 1200, 800);
+
+    //SER Overscan x ···
+    TCanvas * c4 = new TCanvas("c4", "lambda OVX", 1200, 800);
+    gPad->SetGrid();
+    //gStyle->SetOptStat(0);
+    TGraphErrors *glambOVX[2];
+    for(int i=0; i < 2; ++i){
+        glambOVX[i] = new TGraphErrors(RUNID_vec.size(), &RUNID_vec[0], &lamb_ovx_vec[i][0], 0, &err_lamb_ovx_vec[i][0]);
+        glambOVX[i]->SetMarkerColor(color[i]);//
+        glambOVX[i]->SetLineColor(color[i]);//
+        glambOVX[i]->SetMarkerStyle(20+i); //
+    
+    }
+
+    glambOVX[0]->SetTitle(run);
+    glambOVX[0]->GetYaxis()->SetTitle("SEE Overscan x [e-/pxl/day]");
+    glambOVX[0]->GetYaxis()-> SetRangeUser(0.0, 250.0);
+    glambOVX[0]->GetXaxis()->SetTitle("RUNID");
+    glambOVX[0]-> Draw("AP");
+
+    for(int i=1; i < 2; ++i) glambOVX[i]->Draw("sameP");
+    
+    auto l4 = new TLegend(0.75,0.75,0.90,0.90);
+    
+    for (int i=0; i<2; i++) {
+      l4->AddEntry(glambOVX[i],TString:: Format("Ohdu %d", i+1), "p");
+    }
+
+    l4->Draw();
+
+    //Readout Noise ···
+    TCanvas * c3 = new TCanvas("c3", "Readout Noise", 1200, 500);
+    gPad->SetGrid();
+    //gStyle->SetOptStat(0);
+    TGraphErrors *gRN[2];
+    for(int i=0; i < 2; ++i){
+        gRN[i] = new TGraphErrors(RUNID_vec.size(), &RUNID_vec[0], &RN_vec[i][0], 0, &err_RN_vec[i][0]);
+        gRN[i]->SetMarkerColor(color[i]);//
+        gRN[i]->SetLineColor(color[i]);//
+        gRN[i]->SetMarkerStyle(20+i); //
+    
+    }
+
+    gRN[0]->SetTitle(run);
+    gRN[0]->GetYaxis()->SetTitle("Readout Noise [e-]");
+    gRN[0]->GetYaxis()-> SetRangeUser(0.180, 0.30);
+    gRN[0]->GetXaxis()->SetTitle("RUNID");
+    gRN[0]-> Draw("AP");
+
+    for(int i=1; i < 2; ++i) gRN[i]->Draw("sameP");
+    
+    auto l3 = new TLegend(0.75,0.75,0.90,0.90);//(0.75,0.10,0.90,0.35);
+    
+    for (int i=0; i<2; i++) {
+      l3->AddEntry(gRN[i],TString:: Format("Ohdu %d", i+1), "p");
+    }
+
+   l3->Draw();
+
+    //OCC ···
+    TCanvas * c2 = new TCanvas("c2", "occupancy", 1200, 800);
     gPad->SetGrid();
     //gStyle->SetOptStat(0);
     TGraph *go[4];
     for(int i=0; i < 4; ++i){
         go[i] = new TGraph(RUNID_vec.size(), &RUNID_vec[0], &occ_vec[i][0]);
-        go[i]->SetMarkerColor(i+102);//
-        go[i]->SetMarkerStyle(20); //
+        go[i]->SetMarkerColor(color[i]);//
+        go[i]->SetMarkerStyle(20+i); //
     
     }
 
-    go[0]->SetTitle("RUN 39");
+    go[0]->SetTitle(run);
     go[0]->GetYaxis()->SetTitle("Occupancy [e-/pxl/day]");
-    go[0]->GetYaxis()-> SetRangeUser(0.7, 11.0);
+    go[0]->GetYaxis()-> SetRangeUser(0.0, 1.0);
     go[0]->GetXaxis()->SetTitle("RUNID");
     go[0]-> Draw("AP");
 
@@ -117,9 +192,46 @@ void graf_SEE_Noise(){
    lo->Draw();
 
 
+   //SEE ···
+    TCanvas * c1 = new TCanvas("c1", "SEE Clusters", 1200, 800);
+    gPad->SetGrid();
+    //gStyle->SetOptStat(0);
+    TGraph *g[4];
+    for(int i=0; i < 4; ++i){
+        g[i] = new TGraph(RUNID_vec.size(), &RUNID_vec[0], &see_vec[i][0]);
+        g[i]->SetMarkerColor(color[i]);//
+        g[i]->SetMarkerStyle(20+i); //
+    
+    }
+
+    g[0]->SetTitle(run);
+    g[0]->GetYaxis()->SetTitle("SEE [e-/pxl/day]");
+    g[0]->GetYaxis()-> SetRangeUser(0.0, 0.50);
+    g[0]->GetXaxis()->SetTitle("RUNID");
+    g[0]-> Draw("AP");
+
+    for(int i=1; i < 4; ++i) g[i]->Draw("sameP");
+    
+    auto l1 = new TLegend(0.75,0.75,0.90,0.90);
+    
+    for (int i=0; i<4; i++) {
+      l1->AddEntry(g[i],TString:: Format("Ohdu %d", i+1), "p");
+    }
+
+   l1->Draw();
+
     //SEE_evolution_plot(date_start_vec, see_vec[0], 10, "SEE evolution","SEE evolution");
     //SEE_evolution_plot(date_start_vec, RN_oh1_vec, 10, "RN","RN evolution");
-    //c3->SaveAs("Noise_SEE_run31.png");
+    TString OVY_out = "SEE_OVY_" + run + ".png";
+    TString OVX_out = "SEE_OVX_" + run + ".png";
+    TString RN_out = "RN_" + run + ".png";
+    TString occ_out = "occupancy_" + run + ".png";
+    TString see_out = "active_area_see_" + run + ".png";
+    c5->SaveAs(Form("%s/%s", cfulloutdirname.Data(), OVY_out.Data()));
+    c4->SaveAs(Form("%s/%s", cfulloutdirname.Data(), OVX_out.Data()));
+    c3->SaveAs(Form("%s/%s", cfulloutdirname.Data(), RN_out.Data()));
+    c2->SaveAs(Form("%s/%s", cfulloutdirname.Data(), occ_out.Data()));
+    c1->SaveAs(Form("%s/%s", cfulloutdirname.Data(), see_out.Data()));
 
 }
 
