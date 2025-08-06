@@ -1,4 +1,7 @@
 /* Autora: E.Depaoli Fecha inicial: 09/07/2025
+Última modificación: 
+06/08/25 Corregí regiones (area activa y OVX), corregí factores de normalización. 
+05/08/2025. Arreglé bug en todos los switch.
 Código para calcular el ruido de lectura y el SEE de las imágenes de Atucha utilizando los catálogos hits_corr_proc_run*.root
 de una carpeta. Procesa los archivos que están en dirname+subdirname en orden numérico según el campo "img" del nombre completo
 del catálogo.
@@ -10,9 +13,15 @@ root -b -q RN_SER_Varios_calculos_app.C
 Si no se usa la linea anterior, se bloquea la pantalla por la emergencia de gráficos.
 
 Para usarlo
+ofilename = nombre de un archivo de salida *.txt;
+MODO CARPETA COMPLETA
 main_dirname = ruta completa a la carpeta donde están los catálogos a leer; 
 sub_dirname = nombre de la carpeta que contiene los catálogos;
-ofilename = nombre de un archivo de salida *.txt;
+Comentar las lineas con comentario://to run just one file using filename
+Descomentar las lineas con comentario: //to run over a full folder.
+MODO ÚNICO ARCHIVO
+Descomentar las lineas con comentario://to run just one file using filename
+Comentar las lineas con comentario: //to run over a full folder.
 
 Lo que produce:
 -> Un archivo *.txt conteniendo la tasa de eventos de 1 electrón en [e/pxl/day] sobre overscan x, overscan y y sobre el
@@ -92,9 +101,14 @@ void SetOhdu1Style(TH1 *h1){
 	
 // Global Variables ---------------------------------------------------------------------
 //string filename{"/home/eliana/Documentos/Atucha/images/hits_corr_proc_run_40_01Feb2025__EXP1_NSAMP300_VSUB70_img99.root"};
-string filename{"/media/eliana/0e0c1913-ca43-4252-b2bb-783703f57ea5/proc/run_41/hits/hits_corr_proc_run_41_19Feb2025__EXP1_NSAMP300_VSUB70_img633.root"};
-const char* main_dirname = "/media/eliana/0e0c1913-ca43-4252-b2bb-783703f57ea5/proc/";
-const char* sub_dirname = "run_41/hits/";//"run_39/hits/subset/";
+//string filename{"/media/eliana/0e0c1913-ca43-4252-b2bb-783703f57ea5/proc/run_41/hits/hits_corr_proc_run_41_19Feb2025__EXP1_NSAMP300_VSUB70_img633.root"};
+string filename{"/home/eliana/Documentos/Atucha/images/run_46_29Jul2025/proc/hits/hits_corr_proc_run_46_29Jul2025__EXP1_NSAMP300_VSUB70_NROW100_img7.root"};
+//const char* main_dirname = "/media/eliana/0e0c1913-ca43-4252-b2bb-783703f57ea5/proc/";
+const char* main_dirname = "/home/eliana/Documentos/Atucha/images/";
+const char* sub_dirname = "run_48_01Ago2025_test_vl-0_5/proc/hits/"; //"run_47_31Jul2025_test_vl-1_0/proc/hits/";// "run_46_29Jul2025/proc/hits/";//"run_39/hits/subset/";
+//Archivo de salida
+string ofilename = "RN_SER_Atucha_r48.txt";//;//"PROBANDO_r41_img633.txt";//"RN_SER_Atucha_r39_subset.txt";
+
 //Carpetas salida
 //const char* cfulloutdirname = gSystem->pwd();
 //Creo una carpeta con igual nombre que el run que proceso
@@ -104,8 +118,6 @@ run_folder = run_folder(0, run_folder.First('/'));
 TString cfulloutdirname = TString(gSystem->pwd()) + "/" + run_folder;
 gSystem->mkdir(cfulloutdirname);  // kTRUE crea también si ya existe
 
-//Archivo de salida
-string ofilename = "PROBANDO_r41_img633.txt";//"RN_SER_Atucha_r39_subset.txt";"RN_SER_Atucha_r41.txt";//
 
 double Nmax{};
 //Estimadores ·············································································
@@ -140,6 +152,8 @@ Char_t RUNID_head[256];
 Char_t NCOL[256];//se llena de [0] a [2], las demás posiciones quedan vacías
 Char_t NROW[256];
 Char_t NSAMP[256];
+Char_t CCDNCOL[256];
+Char_t CCDNROW[256];
 
 //hitSumm ---	
 int SR = 307; int filas_aa = 512;
@@ -166,13 +180,6 @@ bool isnthotcol;//to remove hot columns
 int sizehotcol_1_min{sizeof(hotcol_ohdu_1_min)/sizeof(hotcol_ohdu_1_min[0])};
 int sizehotcol_2_min{sizeof(hotcol_ohdu_2_min)/sizeof(hotcol_ohdu_2_min[0])};
 
-// remove events partially inside the active area
-//Borders of the active area
-int xBaryMin=3; // 
-int xBaryMax=305; // 5 on the left from the overscan
-int yBaryMin=3; 
-int yBaryMax=545;
-
 float factor = 1.0;//0.5;//corrección por lectura entre dos imágenes sucesivas
 
 //Función para calcular SER ·························
@@ -192,28 +199,16 @@ Double_t poisson_gauss_conv(Double_t *x, Double_t *par){//lambda [e-/pxl] , mu, 
 }
 
 // Rutina  ----------------------------------------------------------------------------------
-void RN_SER_Varios_calculos_app() {//to run just one file using filename
-//void ProcessImage(const char* filename){//to run over a full folder
+//void RN_SER_Varios_calculos_app() {//to run just one file using filename
+void ProcessImage(const char* filename){//to run over a full folder
 	//SetGlobalStyle();
-
-	double amount_useful_pix_oh1 = (xBaryMax - xBaryMin - hot_col_amount(hotcol_ohdu_1_min, hotcol_ohdu_1_max, sizehotcol_1_min))*(yBaryMax - yBaryMin)*10;//amount of pixels ohdu1 + ohdu2
-	double amount_useful_pix_oh2 = (xBaryMax - xBaryMin - hot_col_amount(hotcol_ohdu_2_min, hotcol_ohdu_2_max, sizehotcol_2_min))*(yBaryMax - yBaryMin)*10;
-	double amount_useful_pix = (xBaryMax - xBaryMin)*(yBaryMax - yBaryMin)*10;
-	// Genero histogramas 	········
-	int nbins_epix_overscan = 35;
-	float lower_bin = -1.0;//0.66;//
-	float upper_bin = 1.8;//0.66;//
-	TH1D * epix_ohdu1_ovx_hist = new TH1D("epix ohdu1 OVX", "Overscan X", nbins_epix_overscan, lower_bin, upper_bin);// ohdu1
-	TH1D * epix_ohdu2_ovx_hist = new TH1D("epix ohdu2 OVX", "Overscan X", nbins_epix_overscan, lower_bin, upper_bin);
-	TH1D * epix_ohdu1_ovy_hist = new TH1D("epix ohdu1 OVY", "Overscan Y", 50, -0.5, 1.5);
-	TH1D * epix_ohdu2_ovy_hist = new TH1D("epix ohdu2 OVY", "Overscan Y", 150, -0.5, 1.5);
-
 	//Open root catalogue
 	cout << filename << endl;
-	//TFile * file = TFile::Open(filename,"READ");// to run over a full folder
-	TFile * file = TFile::Open(filename.c_str(),"READ");// //to run just one file using filename
+	TFile * file = TFile::Open(filename,"READ");//to run over a full folder
+	//TFile * file = TFile::Open(filename.c_str(),"READ");// //to run just one file using filename
 	//c_str() converts a string to an array of characters & terminates it with a null character. No parameters are allowed, a pointer to the array is returned.
 	if (!file->IsOpen()) {std::cerr << "Failed to load file" << filename << std::endl;}
+
 	//Retrieve the tree from the file
 	TTree * cptree = (TTree*) file->Get(treename_cp.c_str());
 	TTree * htree = (TTree*) file->Get(treename_he.c_str());
@@ -228,8 +223,47 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
 	Enable_and_Set_Branches_C(hStree);
 
 	htree->GetEntry(0);
+	
 	cout << "Starting date" << &DATESTART[0] << endl;
 	cout << "Ending date" << &DATEEND[0] << endl;
+	cout << "NCOL = " << NCOL 	<< endl;
+	cout << "CCDNCOL = " << CCDNCOL << endl;
+	cout << "CCDNROW = " << atoi(&CCDNROW [0])<< endl;
+	cout << "NROW = " << atoi(&NROW[0]) << endl;
+    cout << "NSAMP = " << atoi(&NSAMP[0]) << endl; //<< "···· NCOL = " << atoi(&NCOL[0]) << "···· NROW = " << atoi(&NROW[0]) << endl;
+
+	int OVX_INIT_COL = atoi(CCDNCOL)/2.0; //cantidad de columnas del area activa
+	int OVX_COL = atoi(NCOL) - OVX_INIT_COL;
+	cout << "OVX_COL = " << OVX_COL << endl;//cantidad de columnas en el overscan
+	cout << "Inicio overscan = " << OVX_INIT_COL +1 << endl;
+
+	// remove events partially inside the active area
+	//Borders of the active area
+	int xBaryMin=3; // 
+	int xBaryMax= OVX_INIT_COL-50;//3072-50;//305; // 5 on the left from the overscan
+	int yBaryMin=3; 
+	int yBaryMax=atoi(&NROW[0])-5;//95;//545;
+
+	cout << "xBaryMax = " << xBaryMax << endl;
+	cout << "yBaryMax = " << yBaryMax << endl;
+
+	//double amount_useful_pix_oh1 = (xBaryMax - xBaryMin - hot_col_amount(hotcol_ohdu_1_min, hotcol_ohdu_1_max, sizehotcol_1_min))*(yBaryMax - yBaryMin)*10;//amount of pixels ohdu1 + ohdu2
+	//double amount_useful_pix_oh2 = (xBaryMax - xBaryMin - hot_col_amount(hotcol_ohdu_2_min, hotcol_ohdu_2_max, sizehotcol_2_min))*(yBaryMax - yBaryMin)*10;
+	//double amount_useful_pix = (xBaryMax - xBaryMin)*(yBaryMax - yBaryMin)*10;
+	
+	//Leo menos filas que las reales y sin binneado en x ················································
+	double amount_useful_pix_oh1 = (xBaryMax - xBaryMin - hot_col_amount(hotcol_ohdu_1_min, hotcol_ohdu_1_max, sizehotcol_1_min))*(yBaryMax - yBaryMin);//atoi(&NROW[0])
+	double amount_useful_pix_oh2 = (xBaryMax - xBaryMin - hot_col_amount(hotcol_ohdu_2_min, hotcol_ohdu_2_max, sizehotcol_2_min))*(yBaryMax - yBaryMin);
+	double amount_useful_pix = (xBaryMax - xBaryMin)*(yBaryMax - yBaryMin);
+
+	// Genero histogramas 	········
+	int nbins_epix_overscan = 100;
+	float lower_bin = -1.0;//0.66;//
+	float upper_bin = 1.8;//0.66;//
+	TH1D * epix_ohdu1_ovx_hist = new TH1D("epix ohdu1 OVX", "Overscan X", nbins_epix_overscan, lower_bin, upper_bin);// ohdu1
+	TH1D * epix_ohdu2_ovx_hist = new TH1D("epix ohdu2 OVX", "Overscan X", nbins_epix_overscan, lower_bin, upper_bin);
+	TH1D * epix_ohdu1_ovy_hist = new TH1D("epix ohdu1 OVY", "Overscan Y", 50, -0.5, 1.5);
+	TH1D * epix_ohdu2_ovy_hist = new TH1D("epix ohdu2 OVY", "Overscan Y", 150, -0.5, 1.5);
 		
 	//SEE. Viejo. ····
     double clusters_1e_oh1 {0};double clusters_1e_oh2 {0};double clusters_1e_oh3 {0};double clusters_1e_oh4 {0};//SEE
@@ -244,38 +278,59 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
     	isnthotcol=true;
       
     	if (xBary<xBaryMax && xBary>xBaryMin && yBary<yBaryMax && yBary>yBaryMin){//events inside edges of CCD
-    		if (ohdu_hs == 1 || ohdu_hs == 2){//events in quadrants with single electron counting
-    			//Extraer columnas brillantes no reduce el valor final de clusters_1e porque estos no contienen eventos con n > 1. Pero debería reducir la ocupancia ¡y lo hace!
+    		/*if (ohdu_hs == 1 || ohdu_hs == 2){//events in quadrants with single electron counting
+    			
     			if (ohdu_hs == 1){//events outside hot columns
         		    extracthc(hotcol_ohdu_1_min, hotcol_ohdu_1_max,sizehotcol_1_min, isnthotcol, xMin, xMax);
 		        } else if (ohdu_hs == 2){extracthc(hotcol_ohdu_2_min, hotcol_ohdu_2_max,sizehotcol_2_min, isnthotcol, xMin, xMax);}
 
-		 	}       
+		 	} */
 
+		 	//Transforma isnthotcol = false si el pixel está en una columna dañada. //Extraer columnas brillantes no reduce el valor final de clusters_1e porque estos no contienen eventos con n > 1. Pero debería reducir la ocupancia ¡y lo hace!
+			switch(ohdu_hs){
+
+				case 1:
+					extracthc(hotcol_ohdu_1_min, hotcol_ohdu_1_max,sizehotcol_1_min, isnthotcol, xMin, xMax);
+					break;
+				case 2: 
+					extracthc(hotcol_ohdu_2_min, hotcol_ohdu_2_max,sizehotcol_2_min, isnthotcol, xMin, xMax);
+					break;
+
+			}      
+
+		 	//Active Area ····
 			if (isnthotcol==true){//si el evento no contiene ni toca una columna brillante
-		        if(yMax <= 512 && xMax < 307.9 && xMin >= 1){
+		        if(yMax <= atoi(NROW) && xMax <= OVX_INIT_COL && xMin >= 8){// filas activas, antes del overscan, después del prescan
 		        	if (n == 1.0 && e == 1.0 ){//n: pixels occupied, e: electrons in cluster
 			        	switch(ohdu_hs){
 							case 1:
 								++clusters_1e_oh1;
+								break;
 							case 2:
 								++clusters_1e_oh2;
+								break;
 							case 3:
 								++clusters_1e_oh3;
+								break;
 							case 4:
 								++clusters_1e_oh4;
+								break;
 							}
 					}
 
 					switch(ohdu_hs){
 						case 1:
 							occ_ohd1+=n;
+							break;
 						case 2:
 							occ_ohd2+=n;
+							break;
 						case 3:
 							occ_ohd3+=n;
+							break;
 						case 4:
 							occ_ohd4+=n;
+							break;
 					}
 
 				}
@@ -292,45 +347,51 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
         }
     }
 
-    cout << " ················· Active area  - Clusters ··········· " << endl;
+    cout << "-----------------------------------------------------------------------------------" << endl;
+
     cout << "amount of useful pixels in ohdu 1 = " << amount_useful_pix_oh1 << endl;
     cout << "amount of useful pixels in ohdu 2 = " << amount_useful_pix_oh2 << endl;
     cout << "amount of useful pixels in ohdu 3 = " << amount_useful_pix << endl;
             
     //double readout_time_per_pxl_per_sample = 2*image_duration_day*86400/(1024*(6144/20+12.8)*atoi(&NSAMP[0])/2);//cálculo errado porque no contiene overscan en y
-    //multiplico por 2 para cancelar la división por 2 en imagedurationdays (que viene de que hay limpieza entre lecturas sucesivas)
-    double readout_time_per_pxl_per_sample = image_duration_day/atoi(&NCOL[0])/atoi(&NROW[0])/atoi(&NSAMP[0]);
-    exposure_active_area = readout_time_per_pxl_per_sample*atoi(&NSAMP[0])*atoi(&NCOL[0])*1024/2/2;
-    double t_media_ov_px = atoi(&NSAMP[0])*SR*readout_time_per_pxl_per_sample;//;//67e-6/86400
+    //si factor = 2, multiplico por 2 para cancelar la división por 2 en imagedurationdays (que viene de que hay limpieza entre lecturas sucesivas)
+    double readout_time_per_pxl_per_sample = image_duration_day/atoi(&NCOL[0])/atoi(&NROW[0])/atoi(&NSAMP[0]);// 51.6667 microsec
+    //exposure_active_area = readout_time_per_pxl_per_sample*atoi(&NSAMP[0])*atoi(&NCOL[0])*atoi(&CCDNROW[0])/2/2;
+    exposure_active_area = readout_time_per_pxl_per_sample*atoi(&NSAMP[0])*atoi(&NCOL[0])*atoi(&NROW[0])/2;
+    double t_media_ov_px = atoi(&NSAMP[0])*SR*readout_time_per_pxl_per_sample;//;//51.6667 microsec /86400
+    double t_expo_overscan_y = exposure_active_area/atoi(&NROW[0])+exposure_active_area;//
+
+    //double t_expo_overscan_y = atoi(&NSAMP[0])*readout_time_per_pxl_per_sample*(filas_aa - 1)*atoi(&NCOL[0])/2;//0.017329 day
     //double t_expo_overscan_y = atoi(&NSAMP[0])*readout_time_per_pxl_per_sample*(SR+1)/2 + exposure_active_area;//0.017396 day
     //double t_expo_overscan_y = atoi(&NSAMP[0])*readout_time_per_pxl_per_sample*(filas_aa - 1)/2 + exposure_active_area;//0.017417 day //5.4153e-05 day + image_duration_day/2;
     //double t_expo_overscan_y = atoi(&NSAMP[0])*readout_time_per_pxl_per_sample*atoi(&NCOL[0])*(atoi(&NCOL[0])+1)/2 + exposure_active_area;//0.028249 day
-    double t_expo_overscan_y = exposure_active_area/atoi(&NROW[0])+exposure_active_area;//0.017395 day
-    //double t_expo_overscan_y = atoi(&NSAMP[0])*readout_time_per_pxl_per_sample*(filas_aa - 1)*atoi(&NCOL[0])/2;//0.017329 day
+    
     cout << "readout_time_per_pxl_per_sample = " << 1e6*readout_time_per_pxl_per_sample*24*60*60 << " microsec" << endl;
-    cout << "exposure_active_area = " << exposure_active_area << endl;
-    cout << "imagedurationindays = " << setprecision(4)<< image_duration_day << '\n';
+    cout << "exposure_active_area = " << exposure_active_area << " day " << endl;
+    cout << "imageduration = " << setprecision(4)<< image_duration_day*24*60 << " minutes" << '\n';
     cout << "tiempo de exposición promedio de un pixel x-overscan  = " << std::setprecision(5) << t_media_ov_px << " day " << endl; //" sec"  
     cout << "tiempo de exposición promedio de un pixel y-overscan  = " << std::setprecision(5) << t_expo_overscan_y <<  " day " << endl; //" sec"
-    
+
+    cout << "-----------------------------------------------------------------------------------" << endl;
+    cout << " ················· Active area  - Clusters ··········· " << endl;
     cout << "ohdu 1 see normalization = " << amount_useful_pix_oh1*image_duration_day <<  " day*pxl " << endl;
     cout << "ohdu 2 see normalization = " << amount_useful_pix_oh2*image_duration_day <<  " day*pxl " << endl;
     cout << "ohdu 3 & 4 see normalization = " << amount_useful_pix*image_duration_day <<  " day*pxl " << endl;
-    cout << "NSAMP = " << atoi(&NSAMP[0]) << "···· NCOL = " << atoi(&NCOL[0]) << "···· NROW = " << atoi(&NROW[0]) << endl;
-    //cout << "NSAMP = " << &NSAMP[0] << "···· NCOL = " << &NCOL[0] << "···· NROW = " << NROW[0] << "   " << NROW[1] << "   " << NROW[2] << "   " << NROW[3] << "   " << NROW[4] << "   " << endl;
+
     occ_ohd1 = static_cast<float>(occ_ohd1)/ static_cast<float>(amount_useful_pix_oh1);// / image_duration_day; // / (image_duration_day*24*60*60); ///;//imagedurationindays(&DATESTART[0],&DATEEND[0],factor)/
     occ_ohd2 = static_cast<float>(occ_ohd2)/ static_cast<float>(amount_useful_pix_oh2);//  / image_duration_day; // / (image_duration_day*24*60*60);//occ_ohd2;///amount_useful_pix_oh2;
     occ_ohd3 = static_cast<float>(occ_ohd3)/ static_cast<float>(amount_useful_pix);//  / image_duration_day; // / (image_duration_day*24*60*60);//occ_ohd3;///amount_useful_pix;
     occ_ohd4 = static_cast<float>(occ_ohd4)/ static_cast<float>(amount_useful_pix);//  / image_duration_day; // / (image_duration_day*24*60*60); //occ_ohd4;///amount_useful_pix;
-    see_oh1 = clusters_1e_oh1/amount_useful_pix_oh1;//  /image_duration_day; // / (image_duration_day*24*60*60);
-    see_oh2 = clusters_1e_oh2/amount_useful_pix_oh2;//  /image_duration_day; // / (image_duration_day*24*60*60);
-    see_oh3 = clusters_1e_oh3/amount_useful_pix;//  /image_duration_day; // / (image_duration_day*24*60*60);
-    see_oh4 = clusters_1e_oh4/amount_useful_pix;//  /image_duration_day; // / (image_duration_day*24*60*60);
+    see_oh1 = clusters_1e_oh1 / amount_useful_pix_oh1;//  /image_duration_day; // 
+    see_oh2 = clusters_1e_oh2 / amount_useful_pix_oh2;//  /image_duration_day; // 
+    see_oh3 = clusters_1e_oh3 / amount_useful_pix;//  /image_duration_day; // 
+    see_oh4 = clusters_1e_oh4 / amount_useful_pix;//  /image_duration_day; // 
 
     cout << "see_oh1 = " << see_oh1 << " ---- " << "occ_oh1 = " << occ_ohd1 <<  " e/pix " << endl;///day
     cout << "see_oh2 = " << see_oh2 << " ---- " << "occ_oh2 = " << occ_ohd2 <<  " e/pix " << endl;
     cout << "see_oh3 = " << see_oh3 << " ---- " << "occ_oh3 = " << occ_ohd3 <<  " e/pix " << endl;
     cout << "see_oh4 = " << see_oh4 << " ---- " << "occ_oh4 = " << occ_ohd4 <<  " e/pix " << endl;
+
     // Resultados a archivo ···············
 	// Verifico si el archivo ya existe
     bool ofile_already_exists = fileExists(ofilename);// sí = 0, no = 0
@@ -342,19 +403,20 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
 
 	//cout << ofile_already_exists << endl;
 	ofile << RUNID_head << '\t' << &DATESTART[0] << '\t' << see_oh1 << '\t' << occ_ohd1 << '\t' << see_oh2 << '\t' << occ_ohd2 << '\t' << see_oh3 << '\t' << occ_ohd3 << '\t' << see_oh4 << '\t' << occ_ohd4 << '\t'; 
-	
-
-    
+	    
 	// CalPixTree ---------------------------------------------------------------
 	for(int j{0}; j < Entries_cptree; ++j){
 		cptree->GetEntry(j);
 		//Overscan x ·····
-		if(x > 307.9 && ePix < 2 && ePix > -1){//
+		if(x > OVX_INIT_COL && ePix < 2 && ePix > -1){//
 			switch(ohdu){
 			case 1:
 				epix_ohdu1_ovx_hist->Fill(ePix);
+				break;
+
 			case 2:
 				epix_ohdu2_ovx_hist->Fill(ePix);
+				break;
 				
 			}
 		}
@@ -362,13 +424,15 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
 		//SER ····
 		isnthotcol = true;
 		//Overscan y ····
-		if(x <= 307.9  && x > 0.8 && y > 512 && ePix < 2 && ePix > -1){
+		if(x <= OVX_INIT_COL  && x > 7 && y > atoi(&CCDNROW [0]) && ePix < 2 && ePix > -1){
 			//Transforma isnthotcol = false si el pixel está en una columna dañada
 			switch(ohdu){
 			case 1:
 				extracthc(hotcol_ohdu_1_min, hotcol_ohdu_1_max,sizehotcol_1_min, isnthotcol, x, x);
+				break;
 			case 2: 
 				extracthc(hotcol_ohdu_2_min, hotcol_ohdu_2_max,sizehotcol_2_min, isnthotcol, x, x);
+				break;
 			}
 	        
         	if (isnthotcol==true){//si el pixel no está en una columna brillante
@@ -376,8 +440,10 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
 				switch(ohdu){
 				case 1: 
 					epix_ohdu1_ovy_hist->Fill(ePix);
+					break;
 				case 2:
 					epix_ohdu2_ovy_hist->Fill(ePix);
+					break;
 				
 	    		}
 
@@ -454,13 +520,15 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
 	epix_ohdu2_ovx_hist->Draw();
 
 	TObjArray *tokens = TString(filename).Tokenize("_, .");
-	TString OVX_out = ((TObjString*)tokens->At(4))->GetString() + "_" + ((TObjString*)tokens->At(5))->GetString()+ "_" + ((TObjString*)tokens->At(10))->GetString() + "_OVX" + ".png";
-	TString OVY_out = ((TObjString*)tokens->At(4))->GetString() + "_" + ((TObjString*)tokens->At(5))->GetString()+ "_" + ((TObjString*)tokens->At(10))->GetString() + "_OVY" + ".png";
+	TString OVX_out = ((TObjString*)tokens->At(6))->GetString()+ "_" + ((TObjString*)tokens->At(18))->GetString() + "_OVX" + ".png";
+	TString OVY_out = ((TObjString*)tokens->At(4))->GetString() + "_" + ((TObjString*)tokens->At(5))->GetString()+ "_" + ((TObjString*)tokens->At(12))->GetString() + "_OVY" + ".png";
 	//std::cout << OVX_out << std::endl;
 	delete tokens;
+	
 	//c1->SaveAs(OVX_out.Data());
-	//c1->SaveAs(Form("%s/%s", cfulloutdirname.Data(), OVX_out.Data()));
 
+	c1->SaveAs(Form("%s/%s", cfulloutdirname.Data(), OVX_out.Data()));
+/*
 	cout << " --------- OVERSCAN Y --------- " << endl;
 	cout << " OHDU 1 " << endl;
 	
@@ -497,7 +565,7 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
 	cout << "pvalue = " << pvalueovy << endl;
 	//cout << "SER = " << std::setprecision(9) << lamb_2_ovy / t_expo_overscan_y << " +- " << err_lamb_2_ovy / t_expo_overscan_y << " e/pxl/day" << endl;
 	SetOhdu1Style(epix_ohdu2_ovy_hist);
-	epix_ohdu2_ovy_hist->Draw();
+	epix_ohdu2_ovy_hist->Draw();*/
 	//c2->SaveAs(Form("%s/%s", cfulloutdirname.Data(), OVY_out.Data()));
 	//c2->SaveAs(OVY_out.Data());
 	// Resultados a archivo ····
@@ -511,7 +579,8 @@ void RN_SER_Varios_calculos_app() {//to run just one file using filename
 //··················
 // Rutine		····
 //··················
-/*
+//to run over a full folder.
+
 void RN_SER_Varios_calculos_app() {
 
   //Carpetas entrada
@@ -526,13 +595,13 @@ void RN_SER_Varios_calculos_app() {
 	  if (fname.EndsWith(".root") && fname.Contains("hits_corr_proc_run")) {
 	    cout << fulldirname + fname << std::endl;
 	    ProcessImage((fulldirname + "/" + fname).Data());
+		}
 	}
-}
 
 delete files;//esto es importante para liberar memoria porque TObjArray 
 
 }
-*/
+
 //··············································
 //Function definition 						····
 //··············································
@@ -562,6 +631,8 @@ void Enable_and_Set_Branches_B(TTree* & tree){
     tree->SetBranchStatus("RUNID",1);
     tree->SetBranchStatus("NROW",1);
     tree->SetBranchStatus("NCOL",1);
+    tree->SetBranchStatus("CCDNCOL",1);
+    tree->SetBranchStatus("CCDNROW",1);
     tree->SetBranchStatus("NSAMP",1);
 
     tree->SetBranchAddress ("DATESTART",&DATESTART);//save branch content into variable
@@ -569,6 +640,8 @@ void Enable_and_Set_Branches_B(TTree* & tree){
     tree->SetBranchAddress ("RUNID",&RUNID_head);
     tree->SetBranchAddress ("NROW",&NROW);
     tree->SetBranchAddress ("NCOL",&NCOL);
+    tree->SetBranchAddress ("CCDNCOL",&CCDNCOL);
+    tree->SetBranchAddress ("CCDNROW",&CCDNROW);
     tree->SetBranchAddress ("NSAMP",&NSAMP);
 }
 
